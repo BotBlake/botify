@@ -10,7 +10,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
 # import app constants and Worker from model
-from model import APP_NAME, Worker
+from botify.model.model import APP_NAME, Worker
 
 
 # -------------------------

@@ -8,8 +8,9 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
-from model import JellyfinClient, TracksModel, APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN, Worker
-from view import OnboardingWidget, SettingsDialog, TrackPreview, PlaybackBar
+from botify.model.model import TracksModel, APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN, Worker
+from botify.model.jellyfin_apiclient import JellyfinClient 
+from botify.view.view import OnboardingWidget, SettingsDialog, TrackPreview, PlaybackBar
 
 
 class MainWindow(QtWidgets.QMainWindow):
