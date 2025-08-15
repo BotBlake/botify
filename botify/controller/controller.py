@@ -50,7 +50,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.stack)
 
         # Onboarding view
-        self.onboarding = OnboardingWidget(self._client_factory, self.settings)
+        self.onboarding = OnboardingWidget(self._client_factory, self.settings, parent=self)
         self.onboarding.authenticated.connect(self._on_authenticated)
         self.stack.addWidget(self.onboarding)  # idx 0
 
@@ -108,6 +108,23 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             worker.signals.error.connect(lambda e: QtWidgets.QMessageBox.critical(self, "Error", str(e)))
         self.pool.start(worker)
+
+    # ---- Load Login Screen
+    def _load_login_screen(self):
+        self.client = self._client_factory(server=self.settings.value("server"))
+        public_users = self.client._call_endpoint("/Users/Public")
+        user_list = []
+        for user in public_users:
+            image_pm = None
+            if "PrimaryImageTag" in user:
+                image_pm = self.client._get_image_pm("/UserImage", params={"userId": user["Id"]}, crop_ratio=(1, 1))
+            user_list.append({
+                "username": user.get("Name"),
+                "uid": user.get("Id"),
+                "profilepicture": image_pm
+            })
+        splash_screen_pm = self.client._get_image_pm("/Branding/SplashScreen")
+        return splash_screen_pm, user_list
 
     # ---- After login
     def _on_authenticated(self, auth: object):

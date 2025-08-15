@@ -8,9 +8,11 @@ from typing import Any, Dict, Optional
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PyQt6.QtGui import QPixmap
 
 # import app constants and Worker from model
 from botify.model.model import APP_NAME, Worker
+from botify.view.onboarding import LoginScreen
 
 
 # -------------------------
@@ -27,10 +29,11 @@ class OnboardingWidget(QtWidgets.QWidget):
         self.client = None
         self.pool = QtCore.QThreadPool.globalInstance()
         self.secret = None
+        self.parent = parent
 
         self.stack = QtWidgets.QStackedWidget()
         self._build_server_page()
-        self._build_quickconnect_page()
+        # self._build_quickconnect_page()
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.stack)
@@ -53,7 +56,7 @@ class OnboardingWidget(QtWidgets.QWidget):
         form.addRow("Server URL", self.server_edit)
 
         self.next_btn = QtWidgets.QPushButton("Continue →")
-        self.next_btn.clicked.connect(self.start_quickconnect)
+        self.next_btn.clicked.connect(self.open_login)
 
         v.addWidget(title)
         v.addLayout(form)
@@ -62,50 +65,34 @@ class OnboardingWidget(QtWidgets.QWidget):
 
         self.stack.addWidget(page)
 
-    def _build_quickconnect_page(self):
+    def open_login(self):
+        def user_login(username: str, password: str):
+            if not self.client:
+                QtWidgets.QMessageBox.warning(self, "Client Error", "No client initialized.")
+                return
+            try:
+                data = self.client.authenticate_with_credentials(username, password)
+                self._after_auth(data)
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Authentication Error", str(e))
+                return
+
+        self.client = self.client_factory(self.server_edit.text().strip())
+        self.settings.setValue("server", self.client.state.server)
+
+        background_pixmap, user_list = self.parent._load_login_screen()
         page = QtWidgets.QWidget()
         v = QtWidgets.QVBoxLayout(page)
-
-        self.qc_title = QtWidgets.QLabel("Quick Connect")
-        self.qc_title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.qc_title.setStyleSheet("font-size: 18px; font-weight: 600; margin: 8px 0;")
-
-        self.code_label = QtWidgets.QLabel("...")
-        self.code_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.code_label.setStyleSheet("font-size: 28px; font-weight: 700; letter-spacing: 2px; margin: 8px 0;")
-
-        self.info_label = QtWidgets.QLabel(
-            "Open a logged-in Jellyfin app → Settings → Quick Connect and enter the code above.\n"
-            "We will automatically detect authorization."
+        login_screen = LoginScreen(
+            background_pixmap=background_pixmap,
+            users=user_list,
+            show_quickconnect=True,
+            continue_callback=user_login,
+            parent=self
         )
-        self.info_label.setWordWrap(True)
-        self.info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-
-        self.back_btn = QtWidgets.QPushButton("← Back")
-        self.back_btn.clicked.connect(lambda: self.stack.setCurrentIndex(0))
-        self.refresh_btn = QtWidgets.QPushButton("Get New Code")
-        self.refresh_btn.clicked.connect(self.initiate_quickconnect)
-
-        btnrow = QtWidgets.QHBoxLayout()
-        btnrow.addWidget(self.back_btn)
-        btnrow.addStretch(1)
-        btnrow.addWidget(self.refresh_btn)
-
-        self.status_label = QtWidgets.QLabel("")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-
-        v.addWidget(self.qc_title)
-        v.addWidget(self.code_label)
-        v.addWidget(self.info_label)
-        v.addLayout(btnrow)
-        v.addWidget(self.status_label)
-        v.addStretch(1)
-
+        v.addWidget(login_screen)
         self.stack.addWidget(page)
-
-        self.poll_timer = QtCore.QTimer(self)
-        self.poll_timer.setInterval(5000)
-        self.poll_timer.timeout.connect(self.poll_quickconnect_state)
+        self.stack.setCurrentIndex(1)
 
     def start_quickconnect(self):
         server = self.server_edit.text().strip()
@@ -116,15 +103,6 @@ class OnboardingWidget(QtWidgets.QWidget):
         self.settings.setValue("server", self.client.state.server)
         self.stack.setCurrentIndex(1)
         self.initiate_quickconnect()
-
-    def _run(self, fn, on_ok, on_err=None):
-        worker = Worker(fn)
-        worker.signals.finished.connect(on_ok)
-        if on_err:
-            worker.signals.error.connect(on_err)
-        else:
-            worker.signals.error.connect(lambda e: QtWidgets.QMessageBox.critical(self, "Error", str(e)))
-        QtCore.QThreadPool.globalInstance().start(worker)
 
     def initiate_quickconnect(self):
         if not self.client:
