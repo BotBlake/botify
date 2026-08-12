@@ -11,7 +11,8 @@ from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtGui import QPixmap
 
 # import app constants and Worker from model
-from botify.model.model import APP_NAME, Worker
+from botify.model.model import APP_NAME
+from botify.model.threads import Worker
 from botify.view.onboarding import LoginScreen
 
 
@@ -80,19 +81,49 @@ class OnboardingWidget(QtWidgets.QWidget):
         self.client = self.client_factory(self.server_edit.text().strip())
         self.settings.setValue("server", self.client.state.server)
 
-        background_pixmap, user_list = self.parent._load_login_screen()
-        page = QtWidgets.QWidget()
-        v = QtWidgets.QVBoxLayout(page)
-        login_screen = LoginScreen(
-            background_pixmap=background_pixmap,
-            users=user_list,
-            show_quickconnect=True,
-            continue_callback=user_login,
-            parent=self
-        )
-        v.addWidget(login_screen)
-        self.stack.addWidget(page)
-        self.stack.setCurrentIndex(1)
+        # Show a lightweight loading placeholder while assets are fetched
+        loading_page = QtWidgets.QWidget()
+        lv = QtWidgets.QVBoxLayout(loading_page)
+        loading_lbl = QtWidgets.QLabel("Loading login screen…")
+        loading_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        lv.addStretch(1)
+        lv.addWidget(loading_lbl)
+        lv.addStretch(1)
+        self.stack.addWidget(loading_page)
+        self.stack.setCurrentWidget(loading_page)
+
+        # When the main window has loaded splash/users it will call back with the data
+        def on_loaded(result):
+            try:
+                background_pixmap, user_list = result
+            except Exception as e:
+                QtWidgets.QMessageBox.critical(self, "Load Error", str(e))
+                self.stack.setCurrentIndex(0)
+                return
+
+            page = QtWidgets.QWidget()
+            v = QtWidgets.QVBoxLayout(page)
+            login_screen = LoginScreen(
+                background_pixmap=background_pixmap,
+                users=user_list,
+                show_quickconnect=True,
+                continue_callback=user_login,
+                parent=self
+            )
+            v.addWidget(login_screen)
+
+            # Replace loading page with real page in the same stack position
+            idx = self.stack.indexOf(loading_page)
+            if idx != -1:
+                self.stack.removeWidget(loading_page)
+                self.stack.insertWidget(idx, page)
+                self.stack.setCurrentIndex(idx)
+            else:
+                self.stack.addWidget(page)
+                self.stack.setCurrentWidget(page)
+
+        # ask the main window to load the login screen assets asynchronously
+        self.parent.load_login_screen_async(on_loaded)
 
     def start_quickconnect(self):
         server = self.server_edit.text().strip()

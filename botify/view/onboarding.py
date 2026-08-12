@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, py
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPainterPath, QPen, QBrush, QIcon, QFont, QPalette, QLinearGradient
 from PyQt6.QtWidgets import QWidget, QLineEdit, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QGraphicsDropShadowEffect, QLabel, QFrame
 import math
-from botify.model.model import Worker
+from botify.model.threads import Worker
 
 class RotatingCarousel(QWidget):
     def __init__(self, accounts, username_callback=None, parent=None):
@@ -571,6 +571,14 @@ class LoginScreen(QWidget):
                 password=self.login_fields.password_edit.text()
             )
 
+
+    def on_continue(self):
+        # Override to ensure correct callback signature and avoid placeholder tokens
+        if self._callback:
+            self._callback(
+                username=self.login_fields.username_edit.text(),
+                password=self.login_fields.password_edit.text(),
+            )
 
 # --- Small entrypoint ---
 def manual():
