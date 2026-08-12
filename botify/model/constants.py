@@ -1,6 +1,5 @@
-"""Application-level constants centralized for the project.
-
-Keep only simple values here; avoid importing heavy modules to prevent import cycles.
+"""
+Application-level constants centralized for the project.
 """
 
 APP_NAME = "Botify"

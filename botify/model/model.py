@@ -1,31 +1,10 @@
 from __future__ import annotations
 
-import uuid
-import json
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
-import requests
-from requests import Response
 
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
 
-# App-level constants are centralized in botify.model.constants
-from .constants import APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN
-
-# Worker moved to botify.model.threads to centralize threading utilities
-from .threads import Worker, WorkerSignals
-
-
-# Jellyfin client implementation moved into botify.model.jellyfin_apiclient
-# to avoid duplication and centralize HTTP/image helpers.
-# Use botify.model.jellyfin_apiclient.JellyfinClient for server access.
-
-
-# -------------------------
-# Tracks (QAbstractTableModel)
-# -------------------------
 
 class TracksModel(QtCore.QAbstractTableModel):
     HEADERS = ["Title", "Artist(s)", "Album", "Duration", "Id"]
@@ -62,8 +41,16 @@ class TracksModel(QtCore.QAbstractTableModel):
                 return item.get("Id")
         return None
 
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
+    def headerData(
+        self,
+        section: int,
+        orientation: Qt.Orientation,
+        role: int = Qt.ItemDataRole.DisplayRole,
+    ):
+        if (
+            role == Qt.ItemDataRole.DisplayRole
+            and orientation == Qt.Orientation.Horizontal
+        ):
             return self.HEADERS[section]
         return None
 

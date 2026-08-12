@@ -18,7 +18,11 @@ def _fetch_pixmap(url: str) -> QPixmap:
     return pix
 
 
-def load(url: str, on_ok: Callable[[QPixmap], None], on_err: Optional[Callable[[Exception], None]] = None):
+def load(
+    url: str,
+    on_ok: Callable[[QPixmap], None],
+    on_err: Optional[Callable[[Exception], None]] = None,
+):
     """Load an image from URL in a background thread and call on_ok(pixmap) on the main thread.
 
     on_err(exception) will be called if the fetch fails.

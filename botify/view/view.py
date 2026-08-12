@@ -1,18 +1,15 @@
 # view.py
 from __future__ import annotations
 
-import platform
 import requests
 from typing import Any, Dict, Optional
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PyQt6.QtGui import QPixmap
 
 # import app constants and Worker from model
 from botify.model.constants import APP_NAME
-from botify.model.threads import Worker
 from botify.view.onboarding import LoginScreen
 
 
@@ -21,6 +18,7 @@ from botify.view.onboarding import LoginScreen
 # -------------------------
 class OnboardingWidget(QtWidgets.QWidget):
     """Stacked onboarding: server entry -> quick connect code + polling."""
+
     authenticated = QtCore.pyqtSignal(object)
 
     def __init__(self, client_factory, settings: QtCore.QSettings, parent=None):
@@ -69,7 +67,9 @@ class OnboardingWidget(QtWidgets.QWidget):
     def open_login(self):
         def user_login(username: str, password: str):
             if not self.client:
-                QtWidgets.QMessageBox.warning(self, "Client Error", "No client initialized.")
+                QtWidgets.QMessageBox.warning(
+                    self, "Client Error", "No client initialized."
+                )
                 return
             try:
                 data = self.client.authenticate_with_credentials(username, password)
@@ -108,7 +108,7 @@ class OnboardingWidget(QtWidgets.QWidget):
                 users=user_list,
                 show_quickconnect=True,
                 continue_callback=user_login,
-                parent=self
+                parent=self,
             )
             v.addWidget(login_screen)
 
@@ -128,7 +128,9 @@ class OnboardingWidget(QtWidgets.QWidget):
     def start_quickconnect(self):
         server = self.server_edit.text().strip()
         if not server:
-            QtWidgets.QMessageBox.warning(self, "Server", "Please enter your Jellyfin server URL.")
+            QtWidgets.QMessageBox.warning(
+                self, "Server", "Please enter your Jellyfin server URL."
+            )
             return
         self.client = self.client_factory(server)
         self.settings.setValue("server", self.client.state.server)
@@ -157,7 +159,10 @@ class OnboardingWidget(QtWidgets.QWidget):
             auth = bool(data.get("Authenticated"))
             if auth:
                 self.poll_timer.stop()
-                self._run(lambda: self.client.authenticate_with_quickconnect(self.secret), self._after_auth)
+                self._run(
+                    lambda: self.client.authenticate_with_quickconnect(self.secret),
+                    self._after_auth,
+                )
             else:
                 self.status_label.setText("Still waiting for authorization…")
 
@@ -184,13 +189,16 @@ class SettingsDialog(QtWidgets.QDialog):
         form.addRow("Server URL", self.server_edit)
 
         btns = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.StandardButton.Save | QtWidgets.QDialogButtonBox.StandardButton.Cancel
+            QtWidgets.QDialogButtonBox.StandardButton.Save
+            | QtWidgets.QDialogButtonBox.StandardButton.Cancel
         )
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
 
         self.logout_btn = QtWidgets.QPushButton("Log out")
-        self.logout_btn.setStyleSheet("QPushButton{background:#e74c3c;color:white;padding:6px;border-radius:6px}")
+        self.logout_btn.setStyleSheet(
+            "QPushButton{background:#e74c3c;color:white;padding:6px;border-radius:6px}"
+        )
         self.logout_btn.clicked.connect(self.logout)
 
         layout.addLayout(form)
@@ -205,25 +213,32 @@ class SettingsDialog(QtWidgets.QDialog):
     def logout(self):
         for key in ("token", "user_id"):
             self.settings.remove(key)
-        QtWidgets.QMessageBox.information(self, "Logged out", "Session cleared. You will need to log in again.")
+        QtWidgets.QMessageBox.information(
+            self, "Logged out", "Session cleared. You will need to log in again."
+        )
         self.accept()
 
 
 class TrackPreview(QtWidgets.QWidget):
     """Right-side preview panel for the selected track."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pool = QtCore.QThreadPool.globalInstance()
         self.cover_label = QtWidgets.QLabel("No track selected")
         self.cover_label.setFixedSize(220, 220)
         self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover_label.setStyleSheet("background:#ddd;border:1px solid #bbb;border-radius:6px;")
+        self.cover_label.setStyleSheet(
+            "background:#ddd;border:1px solid #bbb;border-radius:6px;"
+        )
 
         self.title_lbl = QtWidgets.QLabel("")
         self.title_lbl.setStyleSheet("font-weight:600;font-size:14px")
         self.meta_lbl = QtWidgets.QLabel("")
         self.meta_lbl.setWordWrap(True)
-        self.meta_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.meta_lbl.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
 
         v = QtWidgets.QVBoxLayout(self)
         v.addWidget(self.cover_label)
@@ -246,7 +261,9 @@ class TrackPreview(QtWidgets.QWidget):
         m, s = divmod(seconds, 60)
         dur = f"{m}:{s:02d}"
         self.title_lbl.setText(name or "(untitled)")
-        self.meta_lbl.setText(f"Album: {album}\nArtists: {artists}\nDuration: {dur}\nId: {track.get('Id','')}")
+        self.meta_lbl.setText(
+            f"Album: {album}\nArtists: {artists}\nDuration: {dur}\nId: {track.get('Id', '')}"
+        )
 
         # async image load (use centralized image loader)
         if image_url:
@@ -255,7 +272,12 @@ class TrackPreview(QtWidgets.QWidget):
             def ok(pix: QtGui.QPixmap):
                 if not pix.isNull():
                     self.cover_label.setPixmap(
-                        pix.scaled(220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                        pix.scaled(
+                            220,
+                            220,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
                     )
                 else:
                     self.cover_label.setText("No Image")
@@ -270,27 +292,36 @@ class TrackPreview(QtWidgets.QWidget):
 
 class PlaybackBar(QtWidgets.QWidget):
     """Bottom playback bar with cover, seek, controls, volume."""
+
     def __init__(self, player: QMediaPlayer, audio_output: QAudioOutput, parent=None):
         super().__init__(parent)
         self.pool = QtCore.QThreadPool.globalInstance()
         self.player = player
         self.audio_output = audio_output
         self.setObjectName("PlaybackBar")
-        self.setStyleSheet("#PlaybackBar{border-top:1px solid #ddd;background:#fafafa;}")
+        self.setStyleSheet(
+            "#PlaybackBar{border-top:1px solid #ddd;background:#fafafa;}"
+        )
 
         self.cover = QtWidgets.QLabel("♪")
         self.cover.setFixedSize(80, 80)
         self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover.setStyleSheet("background:#eee;border:1px solid #ddd;border-radius:6px;")
+        self.cover.setStyleSheet(
+            "background:#eee;border:1px solid #ddd;border-radius:6px;"
+        )
 
         self.title = QtWidgets.QLabel("")
         self.sub = QtWidgets.QLabel("")
         self.sub.setStyleSheet("color:#666;font-size:11px")
 
-        self.play_btn = QtWidgets.QPushButton(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaPlay), "")
+        self.play_btn = QtWidgets.QPushButton(
+            self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaPlay), ""
+        )
         self.play_btn.clicked.connect(self._toggle_play)
 
-        self.stop_btn = QtWidgets.QPushButton(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaStop), "")
+        self.stop_btn = QtWidgets.QPushButton(
+            self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaStop), ""
+        )
         self.stop_btn.clicked.connect(self.player.stop)
 
         self.seek = QtWidgets.QSlider(Qt.Orientation.Horizontal)
@@ -352,7 +383,12 @@ class PlaybackBar(QtWidgets.QWidget):
         def ok(pix: QtGui.QPixmap):
             if not pix.isNull():
                 self.cover.setPixmap(
-                    pix.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    pix.scaled(
+                        80,
+                        80,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
                 )
             else:
                 self.cover.setText("♪")

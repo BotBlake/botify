@@ -1,6 +1,6 @@
 """Botify package initializer.
 
-This file makes the botify package importable. Keep it minimal — avoid side effects here.
+This file makes the botify package importable.
 """
 
 __all__ = [
