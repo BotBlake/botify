@@ -104,7 +104,6 @@ class JellyfinClient:
     ) -> QPixmap:
         """
         Fetches an image from the server and returns it as a QPixmap.
-        Automatically detects image format from the Content-Type header.
         """
         url = f"{self.state.server}{path}"
         response = self.session.get(
@@ -113,21 +112,9 @@ class JellyfinClient:
         response.raise_for_status()
         img_bytes = response.content
 
-        # Detect image format
-        content_type = response.headers.get("Content-Type", "").lower()
-        if "png" in content_type:
-            fmt = "PNG"
-        elif "jpeg" in content_type or "jpg" in content_type:
-            fmt = "JPG"
-        elif "gif" in content_type:
-            fmt = "GIF"
-        elif "bmp" in content_type:
-            fmt = "BMP"
-        else:
-            fmt = None  # Let QPixmap guess
-
         # Load into QPixmap
         pixmap = QPixmap()
+        fmt = None
         if not pixmap.loadFromData(img_bytes, fmt):
             raise ValueError(f"Failed to load image from {url}")
 
