@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import requests
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
@@ -312,7 +312,7 @@ class PlaybackBar(QtWidgets.QWidget):
 
         self.title = QtWidgets.QLabel("")
         self.sub = QtWidgets.QLabel("")
-        self.sub.setStyleSheet("color:#666;font-size:11px")
+        self.sub.setStyleSheet("font-size:11px")
 
         self.play_btn = QtWidgets.QPushButton(
             self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaPlay), ""
@@ -437,3 +437,123 @@ class PlaybackBar(QtWidgets.QWidget):
             else QtWidgets.QStyle.StandardPixmap.SP_MediaPlay
         )
         self.play_btn.setIcon(self.style().standardIcon(icon))
+
+
+# -------------------------
+# Library Browser
+# -------------------------
+class LibraryBrowser(QtWidgets.QWidget):
+    """Landing page showing available libraries (UserViews) in a horizontal row.
+
+    Emits library_selected with the BaseItemDto (dict) when a library is clicked.
+    Layout includes left/right arrows and a large clear space below as in the mock.
+    """
+
+    library_selected = QtCore.pyqtSignal(object)
+
+    def __init__(self, views: List[Dict[str, Any]], client, parent=None):
+        super().__init__(parent)
+        self.views = views
+        self.client = client
+
+        layout = QtWidgets.QVBoxLayout(self)
+        title = QtWidgets.QLabel("Your Libraries")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size:20px;font-weight:600;margin:8px 0;")
+        layout.addWidget(title)
+
+        # Row with arrows and carousel in the middle
+        row = QtWidgets.QHBoxLayout()
+        left_btn = QtWidgets.QPushButton("←")
+        left_btn.setFixedWidth(48)
+        left_btn.setFlat(True)
+        right_btn = QtWidgets.QPushButton("→")
+        right_btn.setFixedWidth(48)
+        right_btn.setFlat(True)
+
+        # Use the LibraryCarousel implemented in onboarding.py
+        from botify.view.components.carousel import LibraryCarousel
+        from botify.model import image_loader
+
+        # Prepare items list for carousel; carousel will draw center title itself
+        # Pass the full BaseItemDto dicts to the carousel so selection keeps all fields
+        items = [it for it in self.views]
+
+        carousel = LibraryCarousel(
+            items,
+            center_changed_callback=None,
+            select_callback=lambda itm: self.library_selected.emit(itm),
+            parent=self,
+        )
+        carousel.setMinimumHeight(220)
+
+        # Asynchronously load images into the carousel pixmaps
+        for idx, it in enumerate(self.views):
+            vid = it.get("Id")
+            if not vid:
+                continue
+            try:
+                url = self.client.image_url_for_item(vid, "Primary", 300)
+            except Exception:
+                url = None
+            if not url:
+                continue
+
+            def make_ok(i):
+                def _ok(pix):
+                    carousel.set_pixmap_at(i, pix)
+
+                return _ok
+
+            def make_err(i):
+                def _err(e):
+                    # ignore errors — carousel will show placeholder
+                    pass
+
+                return _err
+
+            image_loader.load(url, make_ok(idx), make_err(idx))
+
+        # Arrow behaviour: rotate carousel left/right
+        left_btn.clicked.connect(lambda: carousel.rotate(-1))
+        right_btn.clicked.connect(lambda: carousel.rotate(1))
+
+        row.addWidget(left_btn)
+        row.addWidget(carousel, 1)
+        row.addWidget(right_btn)
+
+        layout.addLayout(row)
+
+        # Make sure the carousel and tiles are transparent and don't show borders
+        carousel.setStyleSheet("background:transparent;border:none;")
+        left_btn.setStyleSheet("background:transparent;border:none;font-size:18px;")
+        right_btn.setStyleSheet("background:transparent;border:none;font-size:18px;")
+
+        # Below: large clear area with placeholder text (as per mock)
+        spacer = QtWidgets.QWidget()
+        vsp = QtWidgets.QVBoxLayout(spacer)
+        lbl_main = QtWidgets.QLabel("This space stays\nclear for now")
+        lbl_main.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_main.setStyleSheet("font-size:18px;font-weight:600;margin:20px;")
+        lbl_sub = QtWidgets.QLabel("Lorem\nIpsum")
+        lbl_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_sub.setStyleSheet("font-size:14px;margin-top:20px;")
+        vsp.addStretch(1)
+        vsp.addWidget(lbl_main)
+        vsp.addWidget(lbl_sub)
+        vsp.addStretch(2)
+        layout.addWidget(spacer, 1)
+
+
+class UnsupportedLibraryView(QtWidgets.QWidget):
+    """Simple placeholder for unsupported library types."""
+
+    def __init__(self, collection_name: str = "This feature", parent=None):
+        super().__init__(parent)
+        v = QtWidgets.QVBoxLayout(self)
+        lbl = QtWidgets.QLabel("This feature is not yet supported in Botify 😺")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl.setStyleSheet("font-size:18px;font-weight:600;margin:20px;")
+        v.addStretch(1)
+        v.addWidget(lbl)
+        v.addStretch(2)

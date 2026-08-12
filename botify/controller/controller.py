@@ -12,7 +12,14 @@ from botify.model.model import TracksModel
 from botify.model.constants import APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN
 from botify.model.threads import Worker
 from botify.model.jellyfin_apiclient import JellyfinClient
-from botify.view.view import OnboardingWidget, SettingsDialog, TrackPreview, PlaybackBar
+from botify.view.view import (
+    OnboardingWidget,
+    SettingsDialog,
+    TrackPreview,
+    PlaybackBar,
+    LibraryBrowser,
+)
+from botify.view.libraries.music import music_query_params
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -44,7 +51,7 @@ class MainWindow(QtWidgets.QMainWindow):
         act_settings.triggered.connect(self.open_settings)
         tb.addAction(act_settings)
         act_refresh = QtGui.QAction("Refresh", self)
-        act_refresh.triggered.connect(self.load_tracks)
+        act_refresh.triggered.connect(self.load_library_browser)
         tb.addAction(act_refresh)
 
         # --- Central Layout (Stack: Onboarding vs App; App = table + preview + playback bar)
@@ -64,11 +71,14 @@ class MainWindow(QtWidgets.QMainWindow):
         app_v.setContentsMargins(6, 6, 6, 6)
         app_v.setSpacing(6)
 
-        # Top split: table (left) + preview (right)
-        top = QtWidgets.QWidget()
-        top_h = QtWidgets.QHBoxLayout(top)
-        top_h.setContentsMargins(0, 0, 0, 0)
-        top_h.setSpacing(8)
+        # Top area: stacked widget — landing (library browser) vs content (table + preview)
+        self.top_stack = QtWidgets.QStackedWidget()
+
+        # Content page: table (left) + preview (right)
+        content_page = QtWidgets.QWidget()
+        content_h = QtWidgets.QHBoxLayout(content_page)
+        content_h.setContentsMargins(0, 0, 0, 0)
+        content_h.setSpacing(8)
 
         self.tracks_table = QtWidgets.QTableView()
         self.tracks_table.doubleClicked.connect(self._play_selected)
@@ -84,13 +94,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.preview_panel = TrackPreview()
 
-        top_h.addWidget(self.tracks_table, 3)
-        top_h.addWidget(self.preview_panel, 2)
+        content_h.addWidget(self.tracks_table, 3)
+        content_h.addWidget(self.preview_panel, 2)
+
+        # Add content page to stack
+        self.top_stack.addWidget(QtWidgets.QLabel("Loading…"))  # idx 0 placeholder
+        self.top_stack.addWidget(content_page)  # idx 1 content
 
         # Bottom playback bar
         self.playback_bar = PlaybackBar(self.player, self.audio_output)
 
-        app_v.addWidget(top, 1)
+        app_v.addWidget(self.top_stack, 1)
         app_v.addWidget(self.playback_bar, 0)
         self.stack.addWidget(self.app_container)  # idx 1
 
@@ -104,7 +118,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.client.state.token = self.settings.value("token")
             self.client.state.user_id = self.settings.value("user_id")
             self.stack.setCurrentIndex(1)
-            QtCore.QTimer.singleShot(0, self.load_tracks)
+            QtCore.QTimer.singleShot(0, self.load_library_browser)
         else:
             self.stack.setCurrentIndex(0)
 
@@ -159,7 +173,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.client = self._client_factory(auth.server)
         self.client.state = auth
         self.stack.setCurrentIndex(1)
-        self.load_tracks()
+        self.load_library_browser()
 
     # ---- Settings
     def open_settings(self):
@@ -173,12 +187,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 if token and user_id:
                     self.client.state.token = token
                     self.client.state.user_id = user_id
-                    self.load_tracks()
+                    self.load_library_browser()
                 else:
                     self.stack.setCurrentIndex(0)
 
     # ---- Load tracks
     def load_tracks(self):
+        """Backward compatible: load all tracks across libraries (not the landing page).
+
+        Kept for compatibility but the app now uses the library browser as the default
+        landing view.
+        """
         if not hasattr(self, "client") or not self.client.state.token:
             QtWidgets.QMessageBox.information(
                 self, "Login required", "Please log in via Quick Connect."
@@ -194,6 +213,95 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tracks_table.resizeColumnsToContents()
 
         self._run(self.client.list_all_tracks, ok)
+
+    def load_library_browser(self):
+        """Load the landing page showing available libraries (/UserViews)."""
+        if not hasattr(self, "client") or not self.client.state.token:
+            QtWidgets.QMessageBox.information(
+                self, "Login required", "Please log in via Quick Connect."
+            )
+            self.stack.setCurrentIndex(0)
+            return
+
+        def ok(views):
+            # views is a list of BaseItemDto-like dicts
+            browser = LibraryBrowser(views, self.client, parent=self)
+            browser.library_selected.connect(self.open_library)
+
+            # Replace placeholder at index 0
+            old = self.top_stack.widget(0)
+            self.top_stack.removeWidget(old)
+            self.top_stack.insertWidget(0, browser)
+            self.top_stack.setCurrentIndex(0)
+
+        self._run(self.client.list_user_views, ok)
+
+    def open_library(self, library_item: dict):
+        """Handle navigation when a landing-page library tile is clicked.
+
+        Add debug logs so it's obvious which CollectionType arrived.
+        """
+        # Keep the selected library info for scoping queries
+        self.current_library = {
+            "Id": library_item.get("Id"),
+            "Name": library_item.get("Name"),
+            "CollectionType": library_item.get("CollectionType"),
+        }
+
+        # Debugging output to help track down incorrect CollectionType values
+        coll_type = (library_item.get("CollectionType") or "").lower()
+
+        # Prepare to display the appropriate content in the content slot (index 1)
+        if coll_type == "music":
+            # Reuse existing content page (tracks table + preview)
+            # Load tracks scoped to the selected library
+            self.load_tracks_for_library(library_item)
+            return
+
+        # Unsupported — show friendly placeholder in the content area
+        # Use a more extensible not-implemented view from the libraries package
+        from botify.view.libraries.not_implemented import NotImplementedView
+
+        page = NotImplementedView(library_item.get("Name", ""), parent=self)
+        # Replace whatever is at index 1 with the not-implemented page
+        old = self.top_stack.widget(1)
+        self.top_stack.removeWidget(old)
+        self.top_stack.insertWidget(1, page)
+        self.top_stack.setCurrentIndex(1)
+
+    def load_tracks_for_library(self, library_item: dict):
+        """Load tracks scoped to a specific library/view id using parentId.
+
+        Preserves the existing TracksModel / playback behavior but queries items
+        with parentId=<library id> so the music implementation is scoped to the
+        clicked library.
+        """
+        if not hasattr(self, "client") or not self.client.state.token:
+            QtWidgets.QMessageBox.information(
+                self, "Login required", "Please log in via Quick Connect."
+            )
+            self.stack.setCurrentIndex(0)
+            return
+
+        lib_id = library_item.get("Id")
+        if not lib_id:
+            QtWidgets.QMessageBox.warning(
+                self, "Library", "Selected library has no Id."
+            )
+            return
+
+        params = music_query_params(lib_id)
+
+        def ok(items):
+            print(f"Loaded {len(items)} tracks for library {lib_id}")
+            model_ = TracksModel(items)
+            self.tracks_table.setModel(model_)
+            self.tracks_table.setColumnHidden(4, True)  # hide id column
+            self.tracks_table.resizeColumnsToContents()
+            # Show content page
+            self.top_stack.setCurrentIndex(1)
+
+        self._run(lambda: self.client.list_items_in_parent(lib_id, params=params), ok)
 
     # ---- Preview click
     def _preview_selected(self, index: QtCore.QModelIndex):
