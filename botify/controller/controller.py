@@ -8,7 +8,8 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
-from botify.model.model import TracksModel, APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN, Worker
+from botify.model.model import TracksModel, APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN
+from botify.model.threads import Worker
 from botify.model.jellyfin_apiclient import JellyfinClient 
 from botify.view.view import OnboardingWidget, SettingsDialog, TrackPreview, PlaybackBar
 
@@ -108,6 +109,13 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             worker.signals.error.connect(lambda e: QtWidgets.QMessageBox.critical(self, "Error", str(e)))
         self.pool.start(worker)
+
+    def load_login_screen_async(self, on_ok, on_err=None):
+        """Call _load_login_screen in a background worker and invoke on_ok with the result.
+
+        on_ok will be called with a single argument: (splash_pixmap, user_list)
+        """
+        self._run(self._load_login_screen, on_ok, on_err)
 
     # ---- Load Login Screen
     def _load_login_screen(self):
