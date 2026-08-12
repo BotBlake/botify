@@ -5,11 +5,13 @@ import uuid
 import platform
 
 from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtCore import Qt, QUrl
+from PyQt6.QtCore import QUrl
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
-from botify.model.model import TracksModel, APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN, Worker
-from botify.model.jellyfin_apiclient import JellyfinClient 
+from botify.model.model import TracksModel
+from botify.model.constants import APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN
+from botify.model.threads import Worker
+from botify.model.jellyfin_apiclient import JellyfinClient
 from botify.view.view import OnboardingWidget, SettingsDialog, TrackPreview, PlaybackBar
 
 
@@ -50,7 +52,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.stack)
 
         # Onboarding view
-        self.onboarding = OnboardingWidget(self._client_factory, self.settings, parent=self)
+        self.onboarding = OnboardingWidget(
+            self._client_factory, self.settings, parent=self
+        )
         self.onboarding.authenticated.connect(self._on_authenticated)
         self.stack.addWidget(self.onboarding)  # idx 0
 
@@ -69,8 +73,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tracks_table = QtWidgets.QTableView()
         self.tracks_table.doubleClicked.connect(self._play_selected)
         self.tracks_table.clicked.connect(self._preview_selected)
-        self.tracks_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
-        self.tracks_table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
+        self.tracks_table.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.tracks_table.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
+        )
         self.tracks_table.verticalHeader().setVisible(False)
         self.tracks_table.setSortingEnabled(True)
 
@@ -87,7 +95,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stack.addWidget(self.app_container)  # idx 1
 
         # Restore session if possible
-        if self.settings.value("token") and self.settings.value("user_id") and self.settings.value("server"):
+        if (
+            self.settings.value("token")
+            and self.settings.value("user_id")
+            and self.settings.value("server")
+        ):
             self.client = self._client_factory(self.settings.value("server"))
             self.client.state.token = self.settings.value("token")
             self.client.state.user_id = self.settings.value("user_id")
@@ -98,7 +110,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ---- Client factory
     def _client_factory(self, server: str) -> JellyfinClient:
-        return JellyfinClient(server, device_id=self.device_id, device_name=self.device_name)
+        return JellyfinClient(
+            server, device_id=self.device_id, device_name=self.device_name
+        )
 
     def _run(self, fn, on_ok, on_err=None):
         worker = Worker(fn)
@@ -106,8 +120,17 @@ class MainWindow(QtWidgets.QMainWindow):
         if on_err:
             worker.signals.error.connect(on_err)
         else:
-            worker.signals.error.connect(lambda e: QtWidgets.QMessageBox.critical(self, "Error", str(e)))
+            worker.signals.error.connect(
+                lambda e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            )
         self.pool.start(worker)
+
+    def load_login_screen_async(self, on_ok, on_err=None):
+        """Call _load_login_screen in a background worker and invoke on_ok with the result.
+
+        on_ok will be called with a single argument: (splash_pixmap, user_list)
+        """
+        self._run(self._load_login_screen, on_ok, on_err)
 
     # ---- Load Login Screen
     def _load_login_screen(self):
@@ -117,12 +140,16 @@ class MainWindow(QtWidgets.QMainWindow):
         for user in public_users:
             image_pm = None
             if "PrimaryImageTag" in user:
-                image_pm = self.client._get_image_pm("/UserImage", params={"userId": user["Id"]}, crop_ratio=(1, 1))
-            user_list.append({
-                "username": user.get("Name"),
-                "uid": user.get("Id"),
-                "profilepicture": image_pm
-            })
+                image_pm = self.client._get_image_pm(
+                    "/UserImage", params={"userId": user["Id"]}, crop_ratio=(1, 1)
+                )
+            user_list.append(
+                {
+                    "username": user.get("Name"),
+                    "uid": user.get("Id"),
+                    "profilepicture": image_pm,
+                }
+            )
         splash_screen_pm = self.client._get_image_pm("/Branding/SplashScreen")
         return splash_screen_pm, user_list
 
@@ -152,8 +179,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # ---- Load tracks
     def load_tracks(self):
-        if not hasattr(self, 'client') or not self.client.state.token:
-            QtWidgets.QMessageBox.information(self, "Login required", "Please log in via Quick Connect.")
+        if not hasattr(self, "client") or not self.client.state.token:
+            QtWidgets.QMessageBox.information(
+                self, "Login required", "Please log in via Quick Connect."
+            )
             self.stack.setCurrentIndex(0)
             return
 
@@ -193,7 +222,9 @@ class MainWindow(QtWidgets.QMainWindow):
         title = track.get("Name", "")
         subtitle = ", ".join(track.get("Artists") or [])
         self.playback_bar.set_now_playing_meta(title, subtitle)
-        self.playback_bar.set_cover_async(self.client.image_url_for_item(item_id, "Primary", 400))
+        self.playback_bar.set_cover_async(
+            self.client.image_url_for_item(item_id, "Primary", 400)
+        )
         self.player.play()
 
 

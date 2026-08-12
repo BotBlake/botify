@@ -10,8 +10,8 @@ from PyQt6.QtCore import QRect
 import requests
 from requests import Response
 
-APP_NAME = "Botify"
-APP_VERSION = "0.1.0"
+from botify.model.constants import APP_NAME, APP_VERSION
+
 
 @dataclass
 class AuthState:
@@ -21,10 +21,15 @@ class AuthState:
     token: Optional[str] = None
     user_id: Optional[str] = None
 
+
 class JellyfinClient:
     def __init__(self, server: str, device_id: str, device_name: str):
         self.session = requests.Session()
-        self.state = AuthState(server=self._clean_server(server), device_id=device_id, device_name=device_name)
+        self.state = AuthState(
+            server=self._clean_server(server),
+            device_id=device_id,
+            device_name=device_name,
+        )
         self.timeout = 15
 
     def _clean_server(self, server: str) -> str:
@@ -53,40 +58,57 @@ class JellyfinClient:
 
     def _get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Response:
         url = f"{self.state.server}{path}"
-        return self.session.get(url, headers=self._headers(), params=params, timeout=self.timeout)
+        return self.session.get(
+            url, headers=self._headers(), params=params, timeout=self.timeout
+        )
 
-    def _post(self, path: str, data: Optional[Dict[str, Any]] = None, params: Optional[Dict[str, Any]] = None) -> Response:
+    def _post(
+        self,
+        path: str,
+        data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Response:
         url = f"{self.state.server}{path}"
         payload = json.dumps(data) if data is not None else None
-        return self.session.post(url, headers=self._headers(), data=payload, params=params, timeout=self.timeout)
+        return self.session.post(
+            url,
+            headers=self._headers(),
+            data=payload,
+            params=params,
+            timeout=self.timeout,
+        )
 
-    def _call_endpoint(self, path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _call_endpoint(
+        self, path: str, params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Fetches an image from the server and returns it as a QPixmap.
         Automatically detects image format from Content-Type header.
-    
+
         :param crop_ratio: Optional tuple (width_ratio, height_ratio) for cropping.
             Example: (1, 1) for square, (16, 9) for widescreen.
             If None, returns the full image.
         """
-        
+
         r = self._get(path, params=params)
         if not r.ok:
             return {"error": "Server not found"}
         r.raise_for_status()
         return r.json()
 
-    def _get_image_pm(self, path: str, params: Optional[Dict[str, Any]] = None, crop_ratio: Optional[Tuple[int, int]] = None) -> QPixmap:
+    def _get_image_pm(
+        self,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+        crop_ratio: Optional[Tuple[int, int]] = None,
+    ) -> QPixmap:
         """
         Fetches an image from the server and returns it as a QPixmap.
         Automatically detects image format from the Content-Type header.
         """
         url = f"{self.state.server}{path}"
         response = self.session.get(
-            url,
-            headers=self._headers(),
-            params=params,
-            timeout=self.timeout
+            url, headers=self._headers(), params=params, timeout=self.timeout
         )
         response.raise_for_status()
         img_bytes = response.content
@@ -109,7 +131,7 @@ class JellyfinClient:
         if not pixmap.loadFromData(img_bytes, fmt):
             raise ValueError(f"Failed to load image from {url}")
 
-         # Crop to ratio if specified
+        # Crop to ratio if specified
         if crop_ratio:
             w_ratio, h_ratio = crop_ratio
             img = pixmap.toImage()
@@ -161,12 +183,16 @@ class JellyfinClient:
         user = data.get("User") or {}
         user_id = user.get("Id")
         if not token or not user_id:
-            raise RuntimeError("Quick Connect authentication did not return token/user id")
+            raise RuntimeError(
+                "Quick Connect authentication did not return token/user id"
+            )
         self.state.token = token
         self.state.user_id = user_id
         return data
 
-    def authenticate_with_credentials(self, username: str, password: str) -> Dict[str, Any]:
+    def authenticate_with_credentials(
+        self, username: str, password: str
+    ) -> Dict[str, Any]:
         url = "/Users/AuthenticateByName"
         payload = {"Username": username, "Pw": password}
         r = self._post(url, data=payload)
@@ -189,7 +215,7 @@ class JellyfinClient:
             "Recursive": True,
             "Fields": "Album,Artists,RunTimeTicks,ParentId",
             "SortBy": "SortName",
-            "SortOrder": "Ascending"
+            "SortOrder": "Ascending",
         }
         r = self._get(f"/Users/{self.state.user_id}/Items", params=params)
         r.raise_for_status()
@@ -199,6 +225,8 @@ class JellyfinClient:
         token = self.state.token or ""
         return f"{self.state.server}/Audio/{item_id}/stream?static=true&api_key={token}"
 
-    def image_url_for_item(self, item_id: str, kind: str = "Primary", max_side: int = 400) -> str:
+    def image_url_for_item(
+        self, item_id: str, kind: str = "Primary", max_side: int = 400
+    ) -> str:
         token = self.state.token or ""
         return f"{self.state.server}/Items/{item_id}/Images/{kind}?maxSide={max_side}&quality=90&api_key={token}"
