@@ -248,13 +248,12 @@ class TrackPreview(QtWidgets.QWidget):
         self.title_lbl.setText(name or "(untitled)")
         self.meta_lbl.setText(f"Album: {album}\nArtists: {artists}\nDuration: {dur}\nId: {track.get('Id','')}")
 
-        # async image load
+        # async image load (use centralized image loader)
         if image_url:
-            worker = Worker(self._fetch_image_bytes, image_url)
+            from botify.model import image_loader
 
-            def ok(data: bytes):
-                pix = QtGui.QPixmap()
-                if pix.loadFromData(data):
+            def ok(pix: QtGui.QPixmap):
+                if not pix.isNull():
                     self.cover_label.setPixmap(
                         pix.scaled(220, 220, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     )
@@ -264,9 +263,7 @@ class TrackPreview(QtWidgets.QWidget):
             def err(e: Exception):
                 self.cover_label.setText("No Image")
 
-            worker.signals.finished.connect(ok)
-            worker.signals.error.connect(err)
-            self.pool.start(worker)
+            image_loader.load(image_url, ok, err)
         else:
             self.cover_label.setText("No Image")
 
@@ -350,16 +347,10 @@ class PlaybackBar(QtWidgets.QWidget):
             self.cover.setPixmap(QtGui.QPixmap())  # clear
             return
 
-        def fetch(url_: str) -> bytes:
-            r = requests.get(url_, timeout=10)
-            r.raise_for_status()
-            return r.content
+        from botify.model import image_loader
 
-        worker = Worker(fetch, url)
-
-        def ok(data: bytes):
-            pix = QtGui.QPixmap()
-            if pix.loadFromData(data):
+        def ok(pix: QtGui.QPixmap):
+            if not pix.isNull():
                 self.cover.setPixmap(
                     pix.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 )
@@ -369,9 +360,7 @@ class PlaybackBar(QtWidgets.QWidget):
         def err(e: Exception):
             self.cover.setText("♪")
 
-        worker.signals.finished.connect(ok)
-        worker.signals.error.connect(err)
-        self.pool.start(worker)
+        image_loader.load(url, ok, err)
 
     # ----- internal slots
     def _toggle_play(self):
