@@ -11,11 +11,8 @@ from requests import Response
 from PyQt6 import QtCore
 from PyQt6.QtCore import Qt
 
-APP_NAME = "Botify"
-APP_VERSION = "0.1.0"
-ORG_NAME = "Botify"
-ORG_DOMAIN = "botify.local"
-
+# App-level constants are centralized in botify.model.constants
+from .constants import APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN
 
 # Worker moved to botify.model.threads to centralize threading utilities
 from .threads import Worker, WorkerSignals

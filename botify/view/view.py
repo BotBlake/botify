@@ -11,7 +11,7 @@ from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtGui import QPixmap
 
 # import app constants and Worker from model
-from botify.model.model import APP_NAME
+from botify.model.constants import APP_NAME
 from botify.model.threads import Worker
 from botify.view.onboarding import LoginScreen
 

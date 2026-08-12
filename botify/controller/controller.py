@@ -8,9 +8,10 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
-from botify.model.model import TracksModel, APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN
+from botify.model.model import TracksModel
+from botify.model.constants import APP_NAME, APP_VERSION, ORG_NAME, ORG_DOMAIN
 from botify.model.threads import Worker
-from botify.model.jellyfin_apiclient import JellyfinClient 
+from botify.model.jellyfin_apiclient import JellyfinClient
 from botify.view.view import OnboardingWidget, SettingsDialog, TrackPreview, PlaybackBar
 
 

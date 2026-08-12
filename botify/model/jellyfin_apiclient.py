@@ -10,8 +10,7 @@ from PyQt6.QtCore import QRect
 import requests
 from requests import Response
 
-APP_NAME = "Botify"
-APP_VERSION = "0.1.0"
+from botify.model.constants import APP_NAME, APP_VERSION
 
 @dataclass
 class AuthState:
