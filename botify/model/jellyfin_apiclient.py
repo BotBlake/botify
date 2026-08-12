@@ -208,6 +208,35 @@ class JellyfinClient:
         r.raise_for_status()
         return r.json().get("Items", [])
 
+    def list_user_views(self) -> List[Dict[str, Any]]:
+        """Return the top-level user-visible libraries (UserViews).
+
+        Uses GET /UserViews?userId=<user_id> as the landing-page source.
+        """
+        if not self.state.user_id:
+            raise RuntimeError("Not authenticated")
+        r = self._get("/UserViews", params={"userId": self.state.user_id})
+        r.raise_for_status()
+        return r.json().get("Items", [])
+
+    def list_items_in_parent(
+        self, parent_id: str, params: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Query items scoped to a selected library/view by parentId.
+
+        Uses GET /Users/{userId}/Items with parentId to scope results to the
+        selected library. Additional params (IncludeItemTypes, Recursive, etc.)
+        may be supplied.
+        """
+        if not self.state.user_id:
+            raise RuntimeError("Not authenticated")
+        base_params = {"parentId": parent_id}
+        if params:
+            base_params.update(params)
+        r = self._get(f"/Users/{self.state.user_id}/Items", params=base_params)
+        r.raise_for_status()
+        return r.json().get("Items", [])
+
     def stream_url_for_track(self, item_id: str) -> str:
         token = self.state.token or ""
         return f"{self.state.server}/Audio/{item_id}/stream?static=true&api_key={token}"
