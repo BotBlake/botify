@@ -1,9 +1,20 @@
-from PyQt6 import QtCore, QtGui, QtWidgets
-from PyQt6.QtCore import Qt, QTimer, QSize, QPropertyAnimation, QEasingCurve, pyqtProperty, QThreadPool
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QPainterPath, QPen, QBrush, QIcon, QFont, QPalette, QLinearGradient
-from PyQt6.QtWidgets import QWidget, QLineEdit, QHBoxLayout, QVBoxLayout, QPushButton, QSizePolicy, QGraphicsDropShadowEffect, QLabel, QFrame
+from PyQt6 import QtCore, QtWidgets
+from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtProperty
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPainterPath, QFont, QLinearGradient
+from PyQt6.QtWidgets import (
+    QWidget,
+    QLineEdit,
+    QHBoxLayout,
+    QVBoxLayout,
+    QPushButton,
+    QSizePolicy,
+    QGraphicsDropShadowEffect,
+    QLabel,
+    QFrame,
+)
 import math
-from botify.model.model import Worker
+from botify.model.threads import Worker
+
 
 class RotatingCarousel(QWidget):
     def __init__(self, accounts, username_callback=None, parent=None):
@@ -22,7 +33,7 @@ class RotatingCarousel(QWidget):
             if pm is None:
                 pm = QPixmap(100, 100)
                 pm.fill(QColor("gray"))
-            
+
             self.pixmaps.append(pm)
 
         # Rotation & animation
@@ -32,8 +43,8 @@ class RotatingCarousel(QWidget):
         self.animation_timer.timeout.connect(self.animate_step)
         self.animation_timer.setInterval(16)  # ~60 FPS
 
-        self.setMinimumHeight(240)   # was 200
-        self.setMinimumWidth(400)    # was 200
+        self.setMinimumHeight(240)  # was 200
+        self.setMinimumWidth(400)  # was 200
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         # Dynamic spacing
@@ -89,7 +100,9 @@ class RotatingCarousel(QWidget):
             self.angle_offset = self.target_offset
             self.animation_timer.stop()
             if self.username_callback:
-                self.username_callback(self.accounts[self.get_center_index()]["username"])
+                self.username_callback(
+                    self.accounts[self.get_center_index()]["username"]
+                )
         else:
             self.angle_offset += diff * speed
         self.update()
@@ -130,19 +143,22 @@ class RotatingCarousel(QWidget):
             # Border color
             if idx == self.get_center_index():
                 border_color = QColor("darkgrey")
-                border_width = 5
             else:
                 border_color = QColor("black")
-                border_width = 3
 
             painter.setPen(border_color)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(int(x - size / 2), int(y - size / 2), int(size), int(size))
+            painter.drawEllipse(
+                int(x - size / 2), int(y - size / 2), int(size), int(size)
+            )
 
             # Masked image
-            pixmap = self.pixmaps[idx].scaled(int(size), int(size),
-                                              Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                              Qt.TransformationMode.SmoothTransformation)
+            pixmap = self.pixmaps[idx].scaled(
+                int(size),
+                int(size),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
 
             mask = QPixmap(pixmap.size())
             mask.fill(Qt.GlobalColor.transparent)
@@ -160,6 +176,7 @@ class RotatingCarousel(QWidget):
         """Call this from LoginScreen when username is edited manually."""
         self.shrink_center = shrink
         self.update()
+
 
 class LoginFields(QWidget):
     def __init__(self, parent=None, continue_callback=None):
@@ -232,7 +249,9 @@ class LoginFields(QWidget):
         self.username_edit.setText(username)
 
     def _check_fields(self):
-        show = bool(self.username_edit.text().strip()) and bool(self.password_edit.text().strip())
+        show = bool(self.username_edit.text().strip()) and bool(
+            self.password_edit.text().strip()
+        )
         if show and not self.continue_btn.isVisible():
             # Reset slide and opacity before showing for smooth first animation
             self.continue_btn.set_slide(-24)
@@ -263,12 +282,14 @@ class LoginFields(QWidget):
             self.fields_anim.setStartValue(self._fields_offset)
             self.fields_anim.setEndValue(0)
             self.fields_anim.start()
+
             # Hide button after fade out and reset slide/opacity for next show
             def hide_btn():
                 if self.continue_btn.opacity == 0:
                     self.continue_btn.setVisible(False)
                     self.continue_btn.set_slide(-24)
                     self.continue_btn.set_opacity(0)
+
             self.arrow_anim.finished.connect(hide_btn)
 
     def get_fieldsOffset(self):
@@ -279,6 +300,7 @@ class LoginFields(QWidget):
         self.fields_lay.setContentsMargins(int(value), 0, 0, 0)
 
     fieldsOffset = pyqtProperty(int, fget=get_fieldsOffset, fset=set_fieldsOffset)
+
 
 class ContinueButton(QPushButton):
     def __init__(self, continue_callback=None, parent=None):
@@ -321,11 +343,7 @@ class ContinueButton(QPushButton):
         painter.setBrush(QColor("white"))
         painter.setPen(Qt.PenStyle.NoPen)
         w, h = self.width(), self.height()
-        arrow = [
-            (w * 0.38, h * 0.28),
-            (w * 0.38, h * 0.72),
-            (w * 0.68, h * 0.5)
-        ]
+        arrow = [(w * 0.38, h * 0.28), (w * 0.38, h * 0.72), (w * 0.68, h * 0.5)]
         path = QPainterPath()
         path.moveTo(*arrow[0])
         path.lineTo(*arrow[1])
@@ -336,6 +354,7 @@ class ContinueButton(QPushButton):
     def _on_click(self):
         if self._callback:
             self._callback()
+
 
 class GlassBox(QWidget):
     def __init__(self, parent=None):
@@ -361,7 +380,12 @@ class GlassBox(QWidget):
         # Use a playful font if available, fallback to Comic Sans MS or Segoe Script, else default
         font = QFont()
         # Try Comic Sans MS, then Segoe Script, then fallback
-        for family in ["Comic Sans MS", "Segoe Script", "Arial Rounded MT Bold", "Verdana"]:
+        for family in [
+            "Comic Sans MS",
+            "Segoe Script",
+            "Arial Rounded MT Bold",
+            "Verdana",
+        ]:
             font.setFamily(family)
             if QFont(family).exactMatch():
                 break
@@ -384,7 +408,9 @@ class GlassBox(QWidget):
             background: transparent;
         """)
 
-        self.glass_layout.addWidget(self.server_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.glass_layout.addWidget(
+            self.server_label, alignment=Qt.AlignmentFlag.AlignHCenter
+        )
 
     def set_servername(self, name: str):
         self.servername = name
@@ -398,6 +424,7 @@ class GlassBox(QWidget):
         painter.setBrush(color)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawRoundedRect(rect, 28, 28)
+
 
 class QuickConnectWidget(QWidget):
     def __init__(self, parent):
@@ -420,15 +447,21 @@ class QuickConnectWidget(QWidget):
         line1 = QFrame()
         line1.setFrameShape(QFrame.Shape.HLine)
         line1.setFrameShadow(QFrame.Shadow.Sunken)
-        line1.setStyleSheet("color: #aaa; background: #aaa; min-height:1px; border: none;")
+        line1.setStyleSheet(
+            "color: #aaa; background: #aaa; min-height:1px; border: none;"
+        )
         sep_row.addWidget(line1, 1)
         or_label = QLabel("or")
-        or_label.setStyleSheet("color: #aaa; font-size: 13px; font-weight: 500; background: transparent;")
+        or_label.setStyleSheet(
+            "color: #aaa; font-size: 13px; font-weight: 500; background: transparent;"
+        )
         sep_row.addWidget(or_label)
         line2 = QFrame()
         line2.setFrameShape(QFrame.Shape.HLine)
         line2.setFrameShadow(QFrame.Shadow.Sunken)
-        line2.setStyleSheet("color: #aaa; background: #aaa; min-height:1px; border: none;")
+        line2.setStyleSheet(
+            "color: #aaa; background: #aaa; min-height:1px; border: none;"
+        )
         sep_row.addWidget(line2, 1)
         vbox.addLayout(sep_row)
 
@@ -450,7 +483,9 @@ class QuickConnectWidget(QWidget):
         # Code display (selectable, visually focused, fully transparent background)
         self.code_label = QLabel("000000")
         self.code_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.code_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
         self.code_label.setStyleSheet("""
             color: #fff;
             font-size: 32px;
@@ -468,20 +503,22 @@ class QuickConnectWidget(QWidget):
 
     def set_code(self, code: str):
         self.code_label.setText(code)
-    
+
     def _run(self, fn, on_ok, on_err=None):
         worker = Worker(fn)
         worker.signals.finished.connect(on_ok)
         if on_err:
             worker.signals.error.connect(on_err)
         else:
-            worker.signals.error.connect(lambda e: QtWidgets.QMessageBox.critical(self, "Error", str(e)))
+            worker.signals.error.connect(
+                lambda e: QtWidgets.QMessageBox.critical(self, "Error", str(e))
+            )
         QtCore.QThreadPool.globalInstance().start(worker)
 
     def initiate_quickconnect(self):
         def ok(data):
             self.secret = data.get("Secret")
-            if"Code" not in data:
+            if "Code" not in data:
                 self.setVisible(False)
             code = data.get("Code", "??????")
             self.code_label.setText(code)
@@ -497,7 +534,10 @@ class QuickConnectWidget(QWidget):
             auth = bool(data.get("Authenticated"))
             if auth:
                 self.poll_timer.stop()
-                self._run(lambda: self.client.authenticate_with_quickconnect(self.secret), self._after_auth)
+                self._run(
+                    lambda: self.client.authenticate_with_quickconnect(self.secret),
+                    self._after_auth,
+                )
             else:
                 error = data.get("Error")
                 if error:
@@ -516,9 +556,16 @@ class QuickConnectWidget(QWidget):
     def setVisible(self, visible: bool):
         super().setVisible(visible)
 
+
 class LoginScreen(QWidget):
-    def __init__(self, users, show_quickconnect: bool, parent=None,
-                 background_pixmap: QPixmap = None, continue_callback=None):
+    def __init__(
+        self,
+        users,
+        show_quickconnect: bool,
+        parent=None,
+        background_pixmap: QPixmap = None,
+        continue_callback=None,
+    ):
         super().__init__(parent)
         self.users = users
         self.background_pixmap = background_pixmap
@@ -533,13 +580,21 @@ class LoginScreen(QWidget):
         layout.setSpacing(0)
 
         self.glass_box = GlassBox()
-        self.carousel = RotatingCarousel(users, username_callback=self.on_carousel_username)
+        self.carousel = RotatingCarousel(
+            users, username_callback=self.on_carousel_username
+        )
         self.login_fields = LoginFields(continue_callback=self.on_continue)
         self.quickconnect = QuickConnectWidget(parent=self.parent)
 
-        self.glass_box.glass_layout.addWidget(self.carousel, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.glass_box.glass_layout.addWidget(self.login_fields, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.glass_box.glass_layout.addWidget(self.quickconnect, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.glass_box.glass_layout.addWidget(
+            self.carousel, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        self.glass_box.glass_layout.addWidget(
+            self.login_fields, alignment=Qt.AlignmentFlag.AlignCenter
+        )
+        self.glass_box.glass_layout.addWidget(
+            self.quickconnect, alignment=Qt.AlignmentFlag.AlignCenter
+        )
         self.quickconnect.setVisible(show_quickconnect)
 
         layout.addStretch()
@@ -554,7 +609,7 @@ class LoginScreen(QWidget):
                 int(self.width() * self.zoom),
                 int(self.height() * self.zoom),
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation
+                Qt.TransformationMode.SmoothTransformation,
             )
             # Always center the image within the widget
             x = (self.width() - scaled.width()) // 2
@@ -568,7 +623,7 @@ class LoginScreen(QWidget):
         if self._callback:
             self._callback(
                 username=self.login_fields.username_edit.text(),
-                password=self.login_fields.password_edit.text()
+                password=self.login_fields.password_edit.text(),
             )
 
 
@@ -583,7 +638,9 @@ def manual():
 
     # Generate users and assign rainbow profile pictures
     user_count = 5
-    users = [{"username": f"User {i+1}", "uid": f"{i+1}"} for i in range(user_count)]
+    users = [
+        {"username": f"User {i + 1}", "uid": f"{i + 1}"} for i in range(user_count)
+    ]
     for i in range(user_count):
         pm = QPixmap(100, 100)
         pm.fill(Qt.GlobalColor.transparent)
@@ -598,10 +655,14 @@ def manual():
         users[i]["profilepicture"] = pm
 
     # Generate some background gradient (Thanks Interwebs)
-    bg_pixmap = QPixmap(300, 200); bg_pixmap.fill(Qt.GlobalColor.transparent)
-    p = QPainter(bg_pixmap); g = QLinearGradient(0,0,300,200)
-    g.setColorAt(0, QColor(30,30,30)); g.setColorAt(1, QColor(60,60,90))
-    p.fillRect(bg_pixmap.rect(), g); p.end()
+    bg_pixmap = QPixmap(300, 200)
+    bg_pixmap.fill(Qt.GlobalColor.transparent)
+    p = QPainter(bg_pixmap)
+    g = QLinearGradient(0, 0, 300, 200)
+    g.setColorAt(0, QColor(30, 30, 30))
+    g.setColorAt(1, QColor(60, 60, 90))
+    p.fillRect(bg_pixmap.rect(), g)
+    p.end()
 
     def on_continue(username: str, password: str):
         print("Continue clicked! Username:", username, "Password:", password)
@@ -616,7 +677,7 @@ def manual():
                     users=users,
                     show_quickconnect=True,
                     background_pixmap=bg_pixmap,
-                    continue_callback=on_continue
+                    continue_callback=on_continue,
                 )
             )
 
