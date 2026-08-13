@@ -1,98 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import Qt, QUrl, QSize
-from PyQt6.QtGui import QPixmap, QColor
+from PyQt6.QtGui import QPixmap
 
 from botify.model.model import TracksModel
 from botify.view.libraries.music import music_query_params
-
-
-class SimpleTableModel(QtCore.QAbstractTableModel):
-    def __init__(self, headers: List[str], rows: List[Dict[str, Any]]):
-        super().__init__()
-        self.headers = headers
-        self.rows = rows
-
-    def rowCount(self, parent=QtCore.QModelIndex()) -> int:
-        return len(self.rows)
-
-    def columnCount(self, parent=QtCore.QModelIndex()) -> int:
-        return len(self.headers)
-
-    def data(self, index: QtCore.QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
-        if not index.isValid():
-            return None
-        item = self.rows[index.row()]
-        col = index.column()
-        if role == Qt.ItemDataRole.DisplayRole:
-            key = self.headers[col]
-            return item.get(key, "")
-        return None
-
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole):
-        if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
-            return self.headers[section]
-        return None
-
-
-class GridItemWidget(QtWidgets.QWidget):
-    """Reusable grid item used for albums and artists: icon + elided title + optional marquee."""
-    def __init__(self, title: str, size: int = 150, parent=None):
-        super().__init__(parent)
-        v = QtWidgets.QVBoxLayout(self)
-        v.setContentsMargins(6, 6, 6, 6)
-        v.setSpacing(4)
-        self.size = size
-        self.icon_lbl = QtWidgets.QLabel()
-        self.icon_lbl.setFixedSize(size, size)
-        self.icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.title_lbl = QtWidgets.QLabel()
-        self.title_lbl.setFixedWidth(size)
-        self.title_lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.title_lbl.setWordWrap(False)
-        fm = self.title_lbl.fontMetrics()
-        elided = fm.elidedText(title, Qt.TextElideMode.ElideRight, size)
-        self.full_title = title
-        self.title_lbl.setText(elided)
-        v.addWidget(self.icon_lbl)
-        v.addWidget(self.title_lbl)
-        self._marquee_timer = QtCore.QTimer(self)
-        self._marquee_timer.setInterval(250)
-        self._marquee_index = 0
-        self._marquee_enabled = False
-        self._marquee_timer.timeout.connect(self._on_marquee)
-
-    def set_pixmap(self, pix: QPixmap):
-        if pix is None or pix.isNull():
-            self.icon_lbl.setPixmap(QPixmap())
-        else:
-            self.icon_lbl.setPixmap(pix.scaled(self.size, self.size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
-
-    def start_marquee(self):
-        if len(self.full_title) <= 20:
-            return
-        self._marquee_enabled = True
-        self._marquee_index = 0
-        self._marquee_timer.start()
-
-    def stop_marquee(self):
-        self._marquee_timer.stop()
-        fm = self.title_lbl.fontMetrics()
-        self.title_lbl.setText(fm.elidedText(self.full_title, Qt.TextElideMode.ElideRight, self.size))
-
-    def _on_marquee(self):
-        if not self._marquee_enabled:
-            return
-        text = self.full_title + "   "
-        n = len(text)
-        i = self._marquee_index % n
-        display = text[i: i + 30]
-        self.title_lbl.setText(display)
-        self._marquee_index += 1
-
+from botify.view.components import LibrarySearchBar, GridItemWidget
 
 class MusicLibraryView(QtWidgets.QWidget):
     """A small music browser with Songs, Albums and Artists views.
@@ -118,18 +34,14 @@ class MusicLibraryView(QtWidgets.QWidget):
         self.lib_id = library_item.get("Id")
         # optional runner for background tasks (controller._run)
         self.run = run
-        # Enable temporary debug logging for music view requests to aid diagnostics
-        # Set to False to disable verbose logs
-        self._debug_music_logs = True
 
         self.layout = QtWidgets.QVBoxLayout(self)
 
         # Controls row
         self.controls_row = QtWidgets.QHBoxLayout()
-        self.search_box = QtWidgets.QLineEdit()
-        self.search_box.setPlaceholderText("Search…")
-        self.search_box.returnPressed.connect(self.reload_current)
-        self.controls_row.addWidget(self.search_box)
+        self.search_bar = LibrarySearchBar()
+        self.search_bar.searchRequested.connect(self.reload_current)
+        self.controls_row.addWidget(self.search_bar)
 
         self.genre_combo = QtWidgets.QComboBox()
         self.genre_combo.setEditable(False)
@@ -166,6 +78,7 @@ class MusicLibraryView(QtWidgets.QWidget):
 
         # Internal small state to coordinate pending navigation and avoid reload races
         self._pending_artist_filter: Optional[str] = None
+        self._active_artist_id: Optional[str] = None
         self._suppress_next_reload: bool = False
 
         # Helper to execute background tasks using controller._run if provided
@@ -287,7 +200,7 @@ class MusicLibraryView(QtWidgets.QWidget):
         # Start with music defaults
         params = music_query_params(self.lib_id).copy()
         # apply search
-        s = self.search_box.text().strip()
+        s = self.search_bar.text().strip()
         if s:
             params["SearchTerm"] = s
         # favorites
@@ -343,20 +256,11 @@ class MusicLibraryView(QtWidgets.QWidget):
         params["SortOrder"] = "Descending" if self.sort_dir_btn.isChecked() else "Ascending"
 
         def fetch():
-            # Directly call the existing Jellyfin client to keep changes minimal
-            if getattr(self, "_debug_music_logs", False):
-                print(f"[Music DEBUG] fetch songs params: {params}")
             return self.client.list_items_in_parent(self.lib_id, params=params)
 
         def on_ok(items):
             try:
-                if getattr(self, "_debug_music_logs", False):
-                    ids = [f"{i.get('Id')}: {i.get('Name')!r}" for i in (items or [])[:10]]
-                    print(f"[Music DEBUG] fetched songs count={len(items)} sample={ids}")
-                model = TracksModel(items)
-                self.songs_table.setModel(model)
-                self.songs_table.setColumnHidden(4, True)
-                self.songs_table.resizeColumnsToContents()
+                self._set_tracks_model(self.songs_table, items)
             except Exception as e:
                 QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
@@ -369,6 +273,7 @@ class MusicLibraryView(QtWidgets.QWidget):
         params = self._make_base_params()
         # ensure we request albums
         params["IncludeItemTypes"] = "MusicAlbum"
+        self._active_artist_id = artist_id
         # sorting
         sort_map = {
             "Name": "SortName",
@@ -386,15 +291,10 @@ class MusicLibraryView(QtWidgets.QWidget):
             if artist_id:
                 p["artistIds"] = artist_id
                 p["ArtistIds"] = artist_id
-            if getattr(self, "_debug_music_logs", False):
-                print(f"[Music DEBUG] fetch albums params: {p}")
             return self.client.list_items_in_parent(self.lib_id, params=p)
 
         def on_ok(items):
             try:
-                if getattr(self, "_debug_music_logs", False):
-                    ids = [f"{i.get('Id')}: {i.get('Name')!r}" for i in (items or [])[:10]]
-                    print(f"[Music DEBUG] fetched albums count={len(items)} sample={ids}")
                 # Populate grid
                 self.albums_grid.clear()
                 from botify.model import image_loader
@@ -534,6 +434,54 @@ class MusicLibraryView(QtWidgets.QWidget):
             return _err
         image_loader.load(url, make_ok(), make_err(aid))
 
+    def _item_image_url(self, item_id: Optional[str], max_side: int) -> Optional[str]:
+        if not item_id:
+            return None
+        try:
+            return self.client.image_url_for_item(item_id, "Primary", max_side)
+        except Exception:
+            return None
+
+    def _first_artist_id(self, track: Dict[str, Any]) -> Optional[str]:
+        artist_items = track.get("ArtistItems") or []
+        if isinstance(artist_items, list):
+            for entry in artist_items:
+                if isinstance(entry, dict) and entry.get("Id"):
+                    return entry.get("Id")
+        artist_ids = track.get("ArtistIds") or []
+        if isinstance(artist_ids, list) and artist_ids:
+            return artist_ids[0]
+        return self._active_artist_id
+
+    def _resolve_track_image_url(
+        self,
+        track: Dict[str, Any],
+        max_side: int,
+        album_fallback_url: Optional[str] = None,
+    ) -> Optional[str]:
+        # 1) track image
+        track_id = track.get("Id")
+        image_url = self._item_image_url(track_id, max_side)
+        if image_url:
+            return image_url
+        # 2) album image
+        album_id = track.get("AlbumId")
+        image_url = self._item_image_url(album_id, max_side)
+        if image_url:
+            return image_url
+        if album_fallback_url:
+            return album_fallback_url
+        # 3) artist image
+        artist_id = self._first_artist_id(track)
+        return self._item_image_url(artist_id, max_side)
+
+    def _set_tracks_model(self, table: QtWidgets.QTableView, items: list):
+        model = TracksModel(items)
+        table.setModel(model)
+        table.setColumnHidden(4, True)
+        table.resizeColumnsToContents()
+        return model
+
     def _artist_item_clicked(self, item: QtWidgets.QListWidgetItem):
         # open albums view filtered by this artist
         try:
@@ -555,15 +503,9 @@ class MusicLibraryView(QtWidgets.QWidget):
             return
         row = index.row()
         track = model.rows[row]
-        image_url = None
-        # Prefer track's own image; fallback to current album image if present
-        if hasattr(self.client, "image_url_for_item") and track.get("Id"):
-            try:
-                image_url = self.client.image_url_for_item(track["Id"], "Primary", 600)
-            except Exception:
-                image_url = None
-        if not image_url and hasattr(self, "current_album_image") and self.current_album_image:
-            image_url = self.current_album_image
+        image_url = self._resolve_track_image_url(
+            track, 600, getattr(self, "current_album_image", None)
+        )
         self.songs_preview.set_track(track, image_url)
 
     def _preview_album_track(self, index: QtCore.QModelIndex):
@@ -576,16 +518,9 @@ class MusicLibraryView(QtWidgets.QWidget):
             return
         row = index.row()
         track = model.rows[row]
-        image_url = None
-        # Prefer the track's image first
-        if hasattr(self.client, "image_url_for_item") and track.get("Id"):
-            try:
-                image_url = self.client.image_url_for_item(track["Id"], "Primary", 600)
-            except Exception:
-                image_url = None
-        # Fallback to album image if track image isn't available
-        if not image_url and hasattr(self, "current_album_image") and self.current_album_image:
-            image_url = self.current_album_image
+        image_url = self._resolve_track_image_url(
+            track, 600, getattr(self, "current_album_image", None)
+        )
         self.album_preview.set_track(track, image_url)
 
     def _play_song(self, index: QtCore.QModelIndex):
@@ -602,15 +537,11 @@ class MusicLibraryView(QtWidgets.QWidget):
         title = track.get("Name", "")
         subtitle = ", ".join(track.get("Artists") or [])
         self.playback_bar.set_now_playing_meta(title, subtitle)
-        # Prefer the song's own cover; fallback to album image if not available
-        try:
-            track_img = self.client.image_url_for_item(item_id, "Primary", 400)
-        except Exception:
-            track_img = None
+        track_img = self._resolve_track_image_url(
+            track, 400, getattr(self, "current_album_image", None)
+        )
         if track_img:
             self.playback_bar.set_cover_async(track_img)
-        elif hasattr(self, "current_album_image") and self.current_album_image:
-            self.playback_bar.set_cover_async(self.current_album_image)
         self.player.play()
 
     def _load_songs_for_parent(self, parent_id: str, parent_image_url: Optional[str] = None):
@@ -624,21 +555,11 @@ class MusicLibraryView(QtWidgets.QWidget):
         params = {"IncludeItemTypes": "Audio", "Recursive": True, "SortBy": "ParentIndexNumber,IndexNumber,SortName", "SortOrder": "Ascending"}
 
         def fetch():
-            # Historically the album's items are fetched by using the album id
-            # as the parentId. That reliably returns the album's tracks.
-            if getattr(self, "_debug_music_logs", False):
-                print(f"[Music DEBUG] fetch album_tracks parent_id={parent_id} params={params}")
             return self.client.list_items_in_parent(parent_id, params=params)
 
         def on_ok(items):
             try:
-                if getattr(self, "_debug_music_logs", False):
-                    ids = [f"{i.get('Id')}: {i.get('Name')!r}" for i in (items or [])[:10]]
-                    print(f"[Music DEBUG] fetched album_tracks count={len(items)} sample={ids}")
-                model = TracksModel(items)
-                self.songs_table.setModel(model)
-                self.songs_table.setColumnHidden(4, True)
-                self.songs_table.resizeColumnsToContents()
+                model = self._set_tracks_model(self.songs_table, items)
                 # remember current album image for playback/preview
                 self.current_album_image = parent_image_url
                 # show Songs tab (suppress the automatic reload which would otherwise re-query the whole library)
@@ -672,19 +593,11 @@ class MusicLibraryView(QtWidgets.QWidget):
         params = {"IncludeItemTypes": "Audio", "Recursive": True, "SortBy": "ParentIndexNumber,IndexNumber,SortName", "SortOrder": "Ascending"}
 
         def fetch():
-            if getattr(self, "_debug_music_logs", False):
-                print(f"[Music DEBUG] load_album_detail album_id={album_id} params={params}")
             return self.client.list_items_in_parent(album_id, params=params)
 
         def on_ok(items):
             try:
-                if getattr(self, "_debug_music_logs", False):
-                    ids = [f"{i.get('Id')}: {i.get('Name')!r}" for i in (items or [])[:10]]
-                    print(f"[Music DEBUG] album_detail fetched count={len(items)} sample={ids}")
-                model = TracksModel(items)
-                self.album_tracks_table.setModel(model)
-                self.album_tracks_table.setColumnHidden(4, True)
-                self.album_tracks_table.resizeColumnsToContents()
+                model = self._set_tracks_model(self.album_tracks_table, items)
                 self.current_album_image = album_image_url
                 # show album detail page and select first track
                 self.albums_stack.setCurrentIndex(1)
@@ -699,23 +612,6 @@ class MusicLibraryView(QtWidgets.QWidget):
             QtWidgets.QMessageBox.critical(self, "Error", str(e))
 
         self._bg_run(fetch, on_ok, on_err)
-
-    def _open_album(self, index: QtCore.QModelIndex):
-        # This method left for compatibility with old table-based album view.
-        model: SimpleTableModel = self.albums_table.model()  # type: ignore
-        if not model:
-            return
-        row = index.row()
-        album_id = model.rows[row].get("Id")
-        if not album_id:
-            return
-        # attempt to fetch album image
-        album_image = None
-        try:
-            album_image = self.client.image_url_for_item(album_id, "Primary", 400)
-        except Exception:
-            album_image = None
-        self._show_album_tracks(album_id, album_image)
 
     def _play_from_table(self, table: QtWidgets.QTableView, index: QtCore.QModelIndex):
         model: TracksModel = table.model()  # type: ignore
@@ -733,71 +629,12 @@ class MusicLibraryView(QtWidgets.QWidget):
         title = track.get("Name", "")
         subtitle = ", ".join(track.get("Artists") or [])
         self.playback_bar.set_now_playing_meta(title, subtitle)
-        # Prefer the song's own cover; fallback to album image if not available
-        try:
-            track_img = self.client.image_url_for_item(item_id, "Primary", 400)
-        except Exception:
-            track_img = None
+        track_img = self._resolve_track_image_url(
+            track, 400, getattr(self, "current_album_image", None)
+        )
         if track_img:
             self.playback_bar.set_cover_async(track_img)
-        elif hasattr(self, "current_album_image") and self.current_album_image:
-            self.playback_bar.set_cover_async(self.current_album_image)
         self.player.play()
-
-    def _open_artist(self, index: QtCore.QModelIndex):
-        model: SimpleTableModel = self.artists_table.model()  # type: ignore
-        if not model:
-            return
-        row = index.row()
-        artist_id = model.rows[row].get("Id")
-        if not artist_id:
-            return
-        # Query albums by this artist within the library
-        params = {"IncludeItemTypes": "MusicAlbum", "Recursive": True, "artistIds": artist_id}
-        try:
-            items = self.client.list_items_in_parent(self.lib_id, params=params)
-            rows = []
-            for it in items:
-                rows.append({"Name": it.get("Name"), "AlbumArtist": ", ".join(it.get("Artists") or []), "ProductionYear": it.get("ProductionYear") or "", "Id": it.get("Id")})
-            dlg = QtWidgets.QDialog(self)
-            dlg.setWindowTitle("Artist Albums")
-            v = QtWidgets.QVBoxLayout(dlg)
-            tbl = QtWidgets.QTableView()
-            model2 = SimpleTableModel(["Name", "AlbumArtist", "ProductionYear", "Id"], rows)
-            tbl.setModel(model2)
-            tbl.setColumnHidden(3, True)
-            def on_double(idx):
-                row = idx.row()
-                album_id = model2.rows[row].get("Id")
-                if not album_id:
-                    return
-                # fetch album image if possible
-                album_image = None
-                try:
-                    album_image = self.client.image_url_for_item(album_id, "Primary", 400)
-                except Exception:
-                    album_image = None
-                dlg.accept()
-                # Open album in the main Albums view (detail page)
-                self._show_album_tracks(album_id, album_image)
-            tbl.doubleClicked.connect(on_double)
-            v.addWidget(tbl)
-            btns = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Close)
-            btns.rejected.connect(dlg.reject)
-            v.addWidget(btns)
-            dlg.resize(800, 500)
-            dlg.exec()
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(self, "Error", str(e))
-
-    def _open_album_from_dialog(self, model: SimpleTableModel, table: QtWidgets.QTableView, index: QtCore.QModelIndex, parent_dialog: QtWidgets.QDialog):
-        row = index.row()
-        album_id = model.rows[row].get("Id")
-        if not album_id:
-            return
-        parent_dialog.accept()
-        # Open the selected album's tracks
-        self._show_album_tracks(album_id)
 
     # --- helpers
     def _populate_genres_fn(self):

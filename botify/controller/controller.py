@@ -19,7 +19,6 @@ from botify.view.view import (
     PlaybackBar,
     LibraryBrowser,
 )
-from botify.view.libraries.music import music_query_params
 
 
 class MainWindow(QtWidgets.QMainWindow):
