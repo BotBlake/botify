@@ -1,6 +1,6 @@
 from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtProperty
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QPainterPath, QFont, QLinearGradient
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPainterPath, QFont
 from PyQt6.QtWidgets import (
     QWidget,
     QLineEdit,
@@ -252,10 +252,6 @@ class GlassBox(QWidget):
             self.server_label, alignment=Qt.AlignmentFlag.AlignHCenter
         )
 
-    def set_servername(self, name: str):
-        self.servername = name
-        self.server_label.setText(f"Log into {self.servername}")
-
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -341,9 +337,6 @@ class QuickConnectWidget(QWidget):
 
         self.initiate_quickconnect()
 
-    def set_code(self, code: str):
-        self.code_label.setText(code)
-
     def _run(self, fn, on_ok, on_err=None):
         worker = Worker(fn)
         worker.signals.finished.connect(on_ok)
@@ -393,10 +386,6 @@ class QuickConnectWidget(QWidget):
         self.parent.settings.setValue("device_id", self.client.state.device_id)
         self.parent.authenticated.emit(self.client.state)
 
-    def setVisible(self, visible: bool):
-        super().setVisible(visible)
-
-
 class LoginScreen(QWidget):
     def __init__(
         self,
@@ -407,7 +396,6 @@ class LoginScreen(QWidget):
         continue_callback=None,
     ):
         super().__init__(parent)
-        self.users = users
         self.background_pixmap = background_pixmap
         self.zoom = 1.0
         self._callback = continue_callback
@@ -465,62 +453,3 @@ class LoginScreen(QWidget):
                 username=self.login_fields.username_edit.text(),
                 password=self.login_fields.password_edit.text(),
             )
-
-
-# --- Small entrypoint ---
-def manual():
-    import sys
-    from PyQt6.QtWidgets import QApplication, QMainWindow
-    from PyQt6.QtGui import QPixmap, QPainter, QColor
-    from PyQt6.QtCore import Qt
-
-    app = QApplication(sys.argv)
-
-    # Generate users and assign rainbow profile pictures
-    user_count = 5
-    users = [
-        {"username": f"User {i + 1}", "uid": f"{i + 1}"} for i in range(user_count)
-    ]
-    for i in range(user_count):
-        pm = QPixmap(100, 100)
-        pm.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pm)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        hue = int((i / 20) * 360)
-        color = QColor.fromHsv(hue, 255, 220)
-        painter.setBrush(color)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(0, 0, 100, 100)
-        painter.end()
-        users[i]["profilepicture"] = pm
-
-    # Generate some background gradient (Thanks Interwebs)
-    bg_pixmap = QPixmap(300, 200)
-    bg_pixmap.fill(Qt.GlobalColor.transparent)
-    p = QPainter(bg_pixmap)
-    g = QLinearGradient(0, 0, 300, 200)
-    g.setColorAt(0, QColor(30, 30, 30))
-    g.setColorAt(1, QColor(60, 60, 90))
-    p.fillRect(bg_pixmap.rect(), g)
-    p.end()
-
-    def on_continue(username: str, password: str):
-        print("Continue clicked! Username:", username, "Password:", password)
-
-    class MainWindow(QMainWindow):
-        def __init__(self, users):
-            super().__init__()
-            self.setWindowTitle("Botify - Log into Server.")
-            self.setCentralWidget(
-                LoginScreen(
-                    parent=self,
-                    users=users,
-                    show_quickconnect=True,
-                    background_pixmap=bg_pixmap,
-                    continue_callback=on_continue,
-                )
-            )
-
-    win = MainWindow(users)
-    win.show()
-    sys.exit(app.exec())

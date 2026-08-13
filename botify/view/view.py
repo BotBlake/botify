@@ -1,21 +1,14 @@
-# view.py
 from __future__ import annotations
 
-import requests
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List
 
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import Qt
-from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 
-# import app constants and Worker from model
 from botify.model.constants import APP_NAME
 from botify.view.onboarding import LoginScreen
 
 
-# -------------------------
-# UI Components
-# -------------------------
 class OnboardingWidget(QtWidgets.QWidget):
     """Stacked onboarding: server entry -> quick connect code + polling."""
 
@@ -26,13 +19,10 @@ class OnboardingWidget(QtWidgets.QWidget):
         self.settings = settings
         self.client_factory = client_factory
         self.client = None
-        self.pool = QtCore.QThreadPool.globalInstance()
-        self.secret = None
         self.parent = parent
 
         self.stack = QtWidgets.QStackedWidget()
         self._build_server_page()
-        # self._build_quickconnect_page()
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.stack)
@@ -125,50 +115,7 @@ class OnboardingWidget(QtWidgets.QWidget):
         # ask the main window to load the login screen assets asynchronously
         self.parent.load_login_screen_async(on_loaded)
 
-    def start_quickconnect(self):
-        server = self.server_edit.text().strip()
-        if not server:
-            QtWidgets.QMessageBox.warning(
-                self, "Server", "Please enter your Jellyfin server URL."
-            )
-            return
-        self.client = self.client_factory(server)
-        self.settings.setValue("server", self.client.state.server)
-        self.stack.setCurrentIndex(1)
-        self.initiate_quickconnect()
-
-    def initiate_quickconnect(self):
-        if not self.client:
-            return
-        self.status_label.setText("Requesting code…")
-
-        def ok(data):
-            self.secret = data.get("Secret")
-            code = data.get("Code", "??????")
-            self.code_label.setText(code)
-            self.status_label.setText("Waiting for authorization… (polling)")
-            self.poll_timer.start()
-
-        self._run(lambda: self.client.quickconnect_initiate(), ok)
-
-    def poll_quickconnect_state(self):
-        if not self.client or not self.secret:
-            return
-
-        def ok(data):
-            auth = bool(data.get("Authenticated"))
-            if auth:
-                self.poll_timer.stop()
-                self._run(
-                    lambda: self.client.authenticate_with_quickconnect(self.secret),
-                    self._after_auth,
-                )
-            else:
-                self.status_label.setText("Still waiting for authorization…")
-
-        self._run(lambda: self.client.quickconnect_state(self.secret), ok)
-
-    def _after_auth(self, data):
+    def _after_auth(self, _data):
         assert self.client is not None
         self.settings.setValue("token", self.client.state.token)
         self.settings.setValue("user_id", self.client.state.user_id)
@@ -219,229 +166,6 @@ class SettingsDialog(QtWidgets.QDialog):
         self.accept()
 
 
-class TrackPreview(QtWidgets.QWidget):
-    """Right-side preview panel for the selected track."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.pool = QtCore.QThreadPool.globalInstance()
-        self.cover_label = QtWidgets.QLabel("No track selected")
-        self.cover_label.setFixedSize(220, 220)
-        self.cover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover_label.setStyleSheet(
-            "background:#ddd;border:1px solid #bbb;border-radius:6px;"
-        )
-
-        self.title_lbl = QtWidgets.QLabel("")
-        self.title_lbl.setStyleSheet("font-weight:600;font-size:14px")
-        self.meta_lbl = QtWidgets.QLabel("")
-        self.meta_lbl.setWordWrap(True)
-        self.meta_lbl.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-
-        v = QtWidgets.QVBoxLayout(self)
-        v.addWidget(self.cover_label)
-        v.addSpacing(8)
-        v.addWidget(self.title_lbl)
-        v.addWidget(self.meta_lbl)
-        v.addStretch(1)
-
-    def _fetch_image_bytes(self, url: str) -> bytes:
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        return r.content
-
-    def set_track(self, track: Dict[str, Any], image_url: Optional[str]):
-        name = track.get("Name", "")
-        album = track.get("Album", "")
-        artists = ", ".join(track.get("Artists") or [])
-        ticks = track.get("RunTimeTicks") or 0
-        seconds = int(ticks / 10_000_000)
-        m, s = divmod(seconds, 60)
-        dur = f"{m}:{s:02d}"
-        self.title_lbl.setText(name or "(untitled)")
-        self.meta_lbl.setText(
-            f"Album: {album}\nArtists: {artists}\nDuration: {dur}\nId: {track.get('Id', '')}"
-        )
-
-        # async image load (use centralized image loader)
-        if image_url:
-            from botify.model import image_loader
-
-            def ok(pix: QtGui.QPixmap):
-                if not pix.isNull():
-                    self.cover_label.setPixmap(
-                        pix.scaled(
-                            220,
-                            220,
-                            Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation,
-                        )
-                    )
-                else:
-                    self.cover_label.setText("No Image")
-
-            def err(e: Exception):
-                self.cover_label.setText("No Image")
-
-            image_loader.load(image_url, ok, err)
-        else:
-            self.cover_label.setText("No Image")
-
-
-class PlaybackBar(QtWidgets.QWidget):
-    """Bottom playback bar with cover, seek, controls, volume."""
-
-    def __init__(self, player: QMediaPlayer, audio_output: QAudioOutput, parent=None):
-        super().__init__(parent)
-        self.pool = QtCore.QThreadPool.globalInstance()
-        self.player = player
-        self.audio_output = audio_output
-        self.setObjectName("PlaybackBar")
-        self.setStyleSheet(
-            "#PlaybackBar{border-top:1px solid #ddd;background:#fafafa;}"
-        )
-
-        self.cover = QtWidgets.QLabel("♪")
-        self.cover.setFixedSize(80, 80)
-        self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover.setStyleSheet(
-            "background:#eee;border:1px solid #ddd;border-radius:6px;"
-        )
-
-        self.title = QtWidgets.QLabel("")
-        self.sub = QtWidgets.QLabel("")
-        self.sub.setStyleSheet("font-size:11px")
-
-        self.play_btn = QtWidgets.QPushButton(
-            self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaPlay), ""
-        )
-        self.play_btn.clicked.connect(self._toggle_play)
-
-        self.stop_btn = QtWidgets.QPushButton(
-            self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaStop), ""
-        )
-        self.stop_btn.clicked.connect(self.player.stop)
-
-        self.seek = QtWidgets.QSlider(Qt.Orientation.Horizontal)
-        self.seek.setRange(0, 0)
-        self.seek.sliderPressed.connect(self._seek_pressed)
-        self.seek.sliderReleased.connect(self._seek_released)
-        self.seek.sliderMoved.connect(self._seek_moved)
-        self._seeking = False
-
-        self.time_lbl = QtWidgets.QLabel("0:00 / 0:00")
-
-        self.vol_icon = QtWidgets.QLabel("🔊")
-        self.vol = QtWidgets.QSlider(Qt.Orientation.Horizontal)
-        self.vol.setRange(0, 100)
-        self.vol.setValue(50)
-        self.audio_output.setVolume(0.5)
-        self.vol.valueChanged.connect(lambda v: self.audio_output.setVolume(v / 100.0))
-
-        self.player.positionChanged.connect(self._on_position)
-        self.player.durationChanged.connect(self._on_duration)
-        self.player.playbackStateChanged.connect(self._on_state)
-
-        left = QtWidgets.QVBoxLayout()
-        left.addWidget(self.title)
-        left.addWidget(self.sub)
-
-        mid = QtWidgets.QVBoxLayout()
-        mid.addWidget(self.seek)
-        mid.addWidget(self.time_lbl)
-
-        right = QtWidgets.QHBoxLayout()
-        right.addWidget(self.vol_icon)
-        right.addWidget(self.vol)
-
-        row = QtWidgets.QHBoxLayout(self)
-        row.setContentsMargins(10, 6, 10, 6)
-        row.setSpacing(10)
-        row.addWidget(self.cover)
-        row.addLayout(left, 1)
-        row.addWidget(self.play_btn)
-        row.addWidget(self.stop_btn)
-        row.addLayout(mid, 3)
-        row.addStretch(1)
-        row.addLayout(right, 1)
-
-    # ----- public helpers
-    def set_now_playing_meta(self, title: str, subtitle: str = ""):
-        self.title.setText(title)
-        self.sub.setText(subtitle)
-
-    def set_cover_async(self, url: Optional[str]):
-        if not url:
-            self.cover.setText("♪")
-            self.cover.setPixmap(QtGui.QPixmap())  # clear
-            return
-
-        from botify.model import image_loader
-
-        def ok(pix: QtGui.QPixmap):
-            if not pix.isNull():
-                self.cover.setPixmap(
-                    pix.scaled(
-                        80,
-                        80,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                )
-            else:
-                self.cover.setText("♪")
-
-        def err(e: Exception):
-            self.cover.setText("♪")
-
-        image_loader.load(url, ok, err)
-
-    # ----- internal slots
-    def _toggle_play(self):
-        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.player.pause()
-        else:
-            self.player.play()
-
-    def _seek_pressed(self):
-        self._seeking = True
-
-    def _seek_released(self):
-        self._seeking = False
-        self.player.setPosition(self.seek.value())
-
-    def _seek_moved(self, pos: int):
-        # Update live time label while moving
-        dur = max(self.player.duration(), 1)
-        cur_m, cur_s = divmod(int(pos / 1000), 60)
-        dur_m, dur_s = divmod(int(dur / 1000), 60)
-        self.time_lbl.setText(f"{cur_m}:{cur_s:02d} / {dur_m}:{dur_s:02d}")
-
-    def _on_position(self, position: int):
-        if not self._seeking:
-            self.seek.setValue(position)
-            dur = max(self.player.duration(), 1)
-            cur_m, cur_s = divmod(int(position / 1000), 60)
-            dur_m, dur_s = divmod(int(dur / 1000), 60)
-            self.time_lbl.setText(f"{cur_m}:{cur_s:02d} / {dur_m}:{dur_s:02d}")
-
-    def _on_duration(self, duration: int):
-        self.seek.setRange(0, max(duration, 0))
-
-    def _on_state(self, state: QMediaPlayer.PlaybackState):
-        icon = (
-            QtWidgets.QStyle.StandardPixmap.SP_MediaPause
-            if state == QMediaPlayer.PlaybackState.PlayingState
-            else QtWidgets.QStyle.StandardPixmap.SP_MediaPlay
-        )
-        self.play_btn.setIcon(self.style().standardIcon(icon))
-
-
-# -------------------------
-# Library Browser
-# -------------------------
 class LibraryBrowser(QtWidgets.QWidget):
     """Landing page showing available libraries (UserViews) in a horizontal row.
 
@@ -473,11 +197,10 @@ class LibraryBrowser(QtWidgets.QWidget):
 
         # Use the LibraryCarousel implemented in onboarding.py
         from botify.view.components.carousel import LibraryCarousel
-        from botify.model import image_loader
+        from botify.view.components import image_loader
 
-        # Prepare items list for carousel; carousel will draw center title itself
         # Pass the full BaseItemDto dicts to the carousel so selection keeps all fields
-        items = [it for it in self.views]
+        items = list(self.views)
 
         carousel = LibraryCarousel(
             items,
@@ -507,7 +230,7 @@ class LibraryBrowser(QtWidgets.QWidget):
 
             def make_err(i):
                 def _err(e):
-                    # ignore errors — carousel will show placeholder
+                    # ignore errors. carousel will show placeholder
                     pass
 
                 return _err
@@ -543,17 +266,3 @@ class LibraryBrowser(QtWidgets.QWidget):
         vsp.addWidget(lbl_sub)
         vsp.addStretch(2)
         layout.addWidget(spacer, 1)
-
-
-class UnsupportedLibraryView(QtWidgets.QWidget):
-    """Simple placeholder for unsupported library types."""
-
-    def __init__(self, collection_name: str = "This feature", parent=None):
-        super().__init__(parent)
-        v = QtWidgets.QVBoxLayout(self)
-        lbl = QtWidgets.QLabel("This feature is not yet supported in Botify 😺")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("font-size:18px;font-weight:600;margin:20px;")
-        v.addStretch(1)
-        v.addWidget(lbl)
-        v.addStretch(2)

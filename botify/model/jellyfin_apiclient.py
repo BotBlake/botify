@@ -194,20 +194,6 @@ class JellyfinClient:
         self.state.user_id = user_id
         return data
 
-    def list_all_tracks(self) -> List[Dict[str, Any]]:
-        if not self.state.user_id:
-            raise RuntimeError("Not authenticated")
-        params = {
-            "IncludeItemTypes": "Audio",
-            "Recursive": True,
-            "Fields": "Album,Artists,RunTimeTicks,ParentId",
-            "SortBy": "SortName",
-            "SortOrder": "Ascending",
-        }
-        r = self._get(f"/Users/{self.state.user_id}/Items", params=params)
-        r.raise_for_status()
-        return r.json().get("Items", [])
-
     def list_user_views(self) -> List[Dict[str, Any]]:
         """Return the top-level user-visible libraries (UserViews).
 
@@ -236,6 +222,22 @@ class JellyfinClient:
         r = self._get(f"/Users/{self.state.user_id}/Items", params=base_params)
         r.raise_for_status()
         return r.json().get("Items", [])
+
+    def list_item_filters(
+        self, parent_id: str, include_item_types: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Return available filters for items in a selected library."""
+        if not self.state.user_id:
+            raise RuntimeError("Not authenticated")
+        params: Dict[str, Any] = {
+            "userId": self.state.user_id,
+            "parentId": parent_id,
+        }
+        if include_item_types:
+            params["IncludeItemTypes"] = include_item_types
+        r = self._get("/Items/Filters", params=params)
+        r.raise_for_status()
+        return r.json()
 
     def stream_url_for_track(self, item_id: str) -> str:
         token = self.state.token or ""
