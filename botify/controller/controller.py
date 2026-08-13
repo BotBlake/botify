@@ -206,8 +206,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.stack.setCurrentIndex(0)
             return
 
-        lib_id = library_item.get("Id")
-        if not lib_id:
+        if not library_item.get("Id"):
             QtWidgets.QMessageBox.warning(
                 self, "Library", "Selected library has no Id."
             )

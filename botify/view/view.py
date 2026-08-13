@@ -1,4 +1,3 @@
-# view.py
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -6,16 +5,10 @@ from typing import Any, Dict, List
 from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import Qt
 
-# import app constants and Worker from model
 from botify.model.constants import APP_NAME
-from botify.view.components import PlaybackBar as PlaybackBar
-from botify.view.components import TrackPreview as TrackPreview
 from botify.view.onboarding import LoginScreen
 
 
-# -------------------------
-# UI Components
-# -------------------------
 class OnboardingWidget(QtWidgets.QWidget):
     """Stacked onboarding: server entry -> quick connect code + polling."""
 
@@ -26,13 +19,10 @@ class OnboardingWidget(QtWidgets.QWidget):
         self.settings = settings
         self.client_factory = client_factory
         self.client = None
-        self.pool = QtCore.QThreadPool.globalInstance()
-        self.secret = None
         self.parent = parent
 
         self.stack = QtWidgets.QStackedWidget()
         self._build_server_page()
-        # self._build_quickconnect_page()
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.stack)
@@ -125,50 +115,7 @@ class OnboardingWidget(QtWidgets.QWidget):
         # ask the main window to load the login screen assets asynchronously
         self.parent.load_login_screen_async(on_loaded)
 
-    def start_quickconnect(self):
-        server = self.server_edit.text().strip()
-        if not server:
-            QtWidgets.QMessageBox.warning(
-                self, "Server", "Please enter your Jellyfin server URL."
-            )
-            return
-        self.client = self.client_factory(server)
-        self.settings.setValue("server", self.client.state.server)
-        self.stack.setCurrentIndex(1)
-        self.initiate_quickconnect()
-
-    def initiate_quickconnect(self):
-        if not self.client:
-            return
-        self.status_label.setText("Requesting code…")
-
-        def ok(data):
-            self.secret = data.get("Secret")
-            code = data.get("Code", "??????")
-            self.code_label.setText(code)
-            self.status_label.setText("Waiting for authorization… (polling)")
-            self.poll_timer.start()
-
-        self._run(lambda: self.client.quickconnect_initiate(), ok)
-
-    def poll_quickconnect_state(self):
-        if not self.client or not self.secret:
-            return
-
-        def ok(data):
-            auth = bool(data.get("Authenticated"))
-            if auth:
-                self.poll_timer.stop()
-                self._run(
-                    lambda: self.client.authenticate_with_quickconnect(self.secret),
-                    self._after_auth,
-                )
-            else:
-                self.status_label.setText("Still waiting for authorization…")
-
-        self._run(lambda: self.client.quickconnect_state(self.secret), ok)
-
-    def _after_auth(self, data):
+    def _after_auth(self, _data):
         assert self.client is not None
         self.settings.setValue("token", self.client.state.token)
         self.settings.setValue("user_id", self.client.state.user_id)
@@ -219,9 +166,6 @@ class SettingsDialog(QtWidgets.QDialog):
         self.accept()
 
 
-# -------------------------
-# Library Browser
-# -------------------------
 class LibraryBrowser(QtWidgets.QWidget):
     """Landing page showing available libraries (UserViews) in a horizontal row.
 
@@ -255,9 +199,8 @@ class LibraryBrowser(QtWidgets.QWidget):
         from botify.view.components.carousel import LibraryCarousel
         from botify.view.components import image_loader
 
-        # Prepare items list for carousel; carousel will draw center title itself
         # Pass the full BaseItemDto dicts to the carousel so selection keeps all fields
-        items = [it for it in self.views]
+        items = list(self.views)
 
         carousel = LibraryCarousel(
             items,
@@ -287,7 +230,7 @@ class LibraryBrowser(QtWidgets.QWidget):
 
             def make_err(i):
                 def _err(e):
-                    # ignore errors — carousel will show placeholder
+                    # ignore errors. carousel will show placeholder
                     pass
 
                 return _err
@@ -323,17 +266,3 @@ class LibraryBrowser(QtWidgets.QWidget):
         vsp.addWidget(lbl_sub)
         vsp.addStretch(2)
         layout.addWidget(spacer, 1)
-
-
-class UnsupportedLibraryView(QtWidgets.QWidget):
-    """Simple placeholder for unsupported library types."""
-
-    def __init__(self, collection_name: str = "This feature", parent=None):
-        super().__init__(parent)
-        v = QtWidgets.QVBoxLayout(self)
-        lbl = QtWidgets.QLabel("This feature is not yet supported in Botify 😺")
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet("font-size:18px;font-weight:600;margin:20px;")
-        v.addStretch(1)
-        v.addWidget(lbl)
-        v.addStretch(2)

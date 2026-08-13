@@ -48,7 +48,6 @@ class RotatingCarousel(QWidget):
         self.setMinimumWidth(300)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        self.shrink_center = False
         self._spacing_angle = 2 * math.pi / max(len(self.accounts), 1)
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
@@ -122,8 +121,6 @@ class RotatingCarousel(QWidget):
             y = cy + math.cos(angle) * radius_y
             depth_scale = 1.0 - 0.3 * (1 - math.cos(angle))
             size = base_size * depth_scale + 40 * depth_scale
-            if i == self.get_center_index() and self.shrink_center:
-                size *= 0.85
             order.append((x, y, size))
         return order
 
@@ -162,13 +159,6 @@ class RotatingCarousel(QWidget):
         masked = self._masked_pixmap(pix, shape="ellipse")
         painter.drawPixmap(int(x - size / 2), int(y - size / 2), masked)
 
-    def paintEvent(self, event) -> None:  # type: ignore[override]
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        positions = self.get_positions()
-        order_with_idx = sorted(enumerate(positions), key=lambda e: e[1][1])
-        for idx, (x, y, size) in order_with_idx:
-            self._draw_item(painter, idx, x, y, size)
 
 
 class LibraryCarousel(RotatingCarousel):

@@ -194,20 +194,6 @@ class JellyfinClient:
         self.state.user_id = user_id
         return data
 
-    def list_all_tracks(self) -> List[Dict[str, Any]]:
-        if not self.state.user_id:
-            raise RuntimeError("Not authenticated")
-        params = {
-            "IncludeItemTypes": "Audio",
-            "Recursive": True,
-            "Fields": "Album,Artists,RunTimeTicks,ParentId",
-            "SortBy": "SortName",
-            "SortOrder": "Ascending",
-        }
-        r = self._get(f"/Users/{self.state.user_id}/Items", params=params)
-        r.raise_for_status()
-        return r.json().get("Items", [])
-
     def list_user_views(self) -> List[Dict[str, Any]]:
         """Return the top-level user-visible libraries (UserViews).
 

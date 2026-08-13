@@ -3,14 +3,10 @@ from PyQt6.QtCore import Qt
 
 
 class NotImplementedView(QtWidgets.QWidget):
-    """Extensible placeholder for not-yet-implemented library views.
-
-    Provides a central area to add buttons, links, or actions later.
-    """
+    """Placeholder for not-yet-implemented library views."""
 
     def __init__(self, name: str = "Not implemented", parent=None):
         super().__init__(parent)
-        self.name = name
         v = QtWidgets.QVBoxLayout(self)
 
         title = QtWidgets.QLabel(f"{name}")
@@ -20,11 +16,6 @@ class NotImplementedView(QtWidgets.QWidget):
         message = QtWidgets.QLabel("This feature is not yet supported in Botify 😺")
         message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         message.setStyleSheet("font-size:16px;margin:16px;")
-
-        # Action area where additional buttons can be added later
-        self.actions_container = QtWidgets.QWidget()
-        actions_layout = QtWidgets.QHBoxLayout(self.actions_container)
-        actions_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         v.addStretch(1)
         v.addWidget(title)

@@ -21,6 +21,3 @@ class LibrarySearchBar(QtWidgets.QWidget):
 
     def text(self) -> str:
         return self._line_edit.text()
-
-    def setText(self, text: str):
-        self._line_edit.setText(text)
