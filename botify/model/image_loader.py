@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional, Callable
 import requests
 from PyQt6 import QtCore
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QColor
 
 from .threads import Worker
 
@@ -35,3 +35,16 @@ def load(
         # default error handler: print to stderr
         worker.signals.error.connect(lambda e: print("Image load error:", e))
     QtCore.QThreadPool.globalInstance().start(worker)
+
+
+def placeholder(size: int = 150, color: Optional[tuple] = None) -> QPixmap:
+    """Return a simple placeholder QPixmap sized square 'size'.
+
+    color: optional RGB tuple for background (default dark gray)
+    """
+    bg = QColor(60, 60, 60)
+    if color and isinstance(color, tuple) and len(color) == 3:
+        bg = QColor(*color)
+    pm = QPixmap(size, size)
+    pm.fill(bg)
+    return pm

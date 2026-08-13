@@ -270,11 +270,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.top_stack.setCurrentIndex(1)
 
     def load_tracks_for_library(self, library_item: dict):
-        """Load tracks scoped to a specific library/view id using parentId.
+        """Load the Music library UI for the selected library.
 
-        Preserves the existing TracksModel / playback behavior but queries items
-        with parentId=<library id> so the music implementation is scoped to the
-        clicked library.
+        Replaces the content pane with a MusicLibraryView that exposes Songs,
+        Albums, and Artists and uses server-side sorting/filtering. This keeps
+        playback behavior and the existing Jellyfin client.
         """
         if not hasattr(self, "client") or not self.client.state.token:
             QtWidgets.QMessageBox.information(
@@ -290,18 +290,23 @@ class MainWindow(QtWidgets.QMainWindow):
             )
             return
 
-        params = music_query_params(lib_id)
+        # Insert the MusicLibraryView into the content slot (index 1)
+        from botify.view.libraries.music_browser import MusicLibraryView
 
-        def ok(items):
-            print(f"Loaded {len(items)} tracks for library {lib_id}")
-            model_ = TracksModel(items)
-            self.tracks_table.setModel(model_)
-            self.tracks_table.setColumnHidden(4, True)  # hide id column
-            self.tracks_table.resizeColumnsToContents()
-            # Show content page
-            self.top_stack.setCurrentIndex(1)
+        music_view = MusicLibraryView(
+            library_item=library_item,
+            client=self.client,
+            player=self.player,
+            playback_bar=self.playback_bar,
+            run=self._run,
+            parent=self,
+        )
 
-        self._run(lambda: self.client.list_items_in_parent(lib_id, params=params), ok)
+        # Replace whatever is at index 1 with the music view
+        old = self.top_stack.widget(1)
+        self.top_stack.removeWidget(old)
+        self.top_stack.insertWidget(1, music_view)
+        self.top_stack.setCurrentIndex(1)
 
     # ---- Preview click
     def _preview_selected(self, index: QtCore.QModelIndex):
