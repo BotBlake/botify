@@ -58,3 +58,8 @@ class TracksModel(QtCore.QAbstractTableModel):
         if 0 <= row < len(self.rows):
             return self.rows[row].get("Id")
         return None
+
+    def track_at(self, row: int) -> Optional[Dict[str, Any]]:
+        if 0 <= row < len(self.rows):
+            return self.rows[row]
+        return None

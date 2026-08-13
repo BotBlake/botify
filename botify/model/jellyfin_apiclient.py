@@ -237,6 +237,22 @@ class JellyfinClient:
         r.raise_for_status()
         return r.json().get("Items", [])
 
+    def list_item_filters(
+        self, parent_id: str, include_item_types: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Return available filters for items in a selected library."""
+        if not self.state.user_id:
+            raise RuntimeError("Not authenticated")
+        params: Dict[str, Any] = {
+            "userId": self.state.user_id,
+            "parentId": parent_id,
+        }
+        if include_item_types:
+            params["IncludeItemTypes"] = include_item_types
+        r = self._get("/Items/Filters", params=params)
+        r.raise_for_status()
+        return r.json()
+
     def stream_url_for_track(self, item_id: str) -> str:
         token = self.state.token or ""
         return f"{self.state.server}/Audio/{item_id}/stream?static=true&api_key={token}"
