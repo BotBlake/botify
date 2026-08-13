@@ -159,6 +159,14 @@ class RotatingCarousel(QWidget):
         masked = self._masked_pixmap(pix, shape="ellipse")
         painter.drawPixmap(int(x - size / 2), int(y - size / 2), masked)
 
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        """Paint carousel items from back to front according to their depth."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        positions = self.get_positions()
+        order_with_idx = sorted(enumerate(positions), key=lambda item: item[1][1])
+        for idx, (x, y, size) in order_with_idx:
+            self._draw_item(painter, idx, x, y, size)
 
 
 class LibraryCarousel(RotatingCarousel):
@@ -230,11 +238,3 @@ class LibraryCarousel(RotatingCarousel):
             fm = painter.fontMetrics()
             tw = fm.horizontalAdvance(title)
             painter.drawText(int(x - tw / 2), rect_y + h + 20, title)
-
-    def paintEvent(self, event) -> None:  # type: ignore[override]
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        positions = self.get_positions()
-        order_with_idx = sorted(enumerate(positions), key=lambda e: e[1][1])
-        for idx, (x, y, size) in order_with_idx:
-            self._draw_item(painter, idx, x, y, size)
